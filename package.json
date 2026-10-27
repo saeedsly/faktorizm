@@ -1,0 +1,52 @@
+{
+  "name": "faktorizm",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "فاکتوریزم — سامانه هوشمند اسکن، استخراج و مدیریت فاکتور با بینایی ماشین",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "postinstall": "node scripts/copy-ocr-assets.mjs",
+    "server": "node server/index.js",
+    "test:ocr": "node scripts/test-ocr.mjs",
+    "test:parser": "esbuild scripts/test-parser.ts --bundle --platform=node --format=esm --outfile=.tmp/test-parser.mjs --log-level=warning && node .tmp/test-parser.mjs",
+    "test:excel": "esbuild scripts/test-excel.ts --bundle --platform=node --format=cjs --outfile=.tmp/test-excel.cjs --log-level=warning && node .tmp/test-excel.cjs",
+    "test:smoke": "esbuild scripts/smoke.tsx --bundle --platform=node --format=cjs --jsx=automatic --loader:.css=empty --alias:@=./src --alias:pdfjs-dist/build/pdf.worker.min.mjs?url=./scripts/worker-stub.mjs --external:jsdom --external:fake-indexeddb --define:import.meta.env.BASE_URL='\"/\"' --outfile=.tmp/smoke.cjs --log-level=warning && node .tmp/smoke.cjs",
+    "test": "npm run test:parser && npm run test:excel && npm run test:ocr && npm run test:smoke"
+  },
+  "dependencies": {
+    "@fontsource-variable/vazirmatn": "^5.3.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/fas": "^1.0.0",
+    "clsx": "^2.1.1",
+    "date-fns-jalali": "^4.4.0-0",
+    "dexie": "^4.4.7",
+    "dexie-react-hooks": "^1.1.7",
+    "lucide-react": "^1.62.0",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4",
+    "recharts": "^3.10.1",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.7.0",
+    "tesseract.js": "^7.0.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.6",
+    "jsdom": "^26.1.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
+  }
+}

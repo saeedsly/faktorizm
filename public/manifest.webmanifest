@@ -1,0 +1,14 @@
+{
+  "name": "فاکتوریزم — سامانه هوشمند فاکتور",
+  "short_name": "فاکتوریزم",
+  "description": "اسکن و استخراج خودکار فاکتور با بینایی ماشین",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "fa",
+  "background_color": "#0a0e1a",
+  "theme_color": "#6d5efc",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
