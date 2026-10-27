@@ -1,4 +1,5 @@
 // تست دود: بوت کامل اپ در محیط شبیه‌سازی مرورگر (jsdom + IndexedDB مجازی)
+// در نسخه چندکاربره، اولین صفحه باید فرم ورود باشد.
 import { JSDOM } from 'jsdom';
 import 'fake-indexeddb/auto';
 
@@ -38,18 +39,18 @@ async function main() {
 
   const html = document.getElementById('root')!.innerHTML;
   const checks: Array<[boolean, string]> = [
-    [html.includes('فاکتوریزم'), 'نام برند رندر شد'],
-    [html.includes('داشبورد'), 'داشبورد رندر شد'],
-    [html.includes('اسکن'), 'منوی اسکن وجود دارد'],
-    [html.includes('API'), 'منوی API وجود دارد'],
-    [html.length > 5000, `درخت DOM ساخته شد (${html.length} کاراکتر)`],
+    [html.includes('ورود به حساب کاربری'), 'صفحه ورود برای کاربر مهمان رندر شد'],
+    [html.includes('ایمیل'), 'فرم ایمیل وجود دارد'],
+    [html.includes('رمز عبور'), 'فرم رمز عبور وجود دارد'],
+    [html.includes('سعید سالاری'), 'نام سازنده در صفحه ورود دیده می‌شود'],
+    [html.includes('فاکتوریزم'), 'برند رندر شد'],
+    [html.length > 3000, `درخت DOM ساخته شد (${html.length} کاراکتر)`],
   ];
 
+  // داده نمونه محلی همچنان برای کار آفلاین ساخته می‌شود
   const { db } = await import('../src/lib/db');
   const invCount = await db.invoices.count();
-  const contactCount = await db.contacts.count();
-  checks.push([invCount >= 10, `داده نمونه فاکتور بارگذاری شد (${invCount} فاکتور)`]);
-  checks.push([contactCount >= 5, `طرفین حساب نمونه ساخته شد (${contactCount} مورد)`]);
+  checks.push([invCount >= 10, `داده نمونه آفلاین بارگذاری شد (${invCount} فاکتور)`]);
 
   let pass = 0;
   for (const [ok, label] of checks) {

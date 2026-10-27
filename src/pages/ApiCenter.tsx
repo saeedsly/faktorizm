@@ -80,6 +80,16 @@ export default function ApiCenter() {
         }
       />
 
+      <Card className="mb-5 !p-4 flex items-start gap-3 bg-primary-soft border-transparent">
+        <KeyRound size={19} className="text-primary shrink-0 mt-0.5" />
+        <div className="text-xs leading-6 text-muted-foreground">
+          <b className="text-foreground">API تولید نسخه ۲:</b> برای اتصال نرم‌افزار حسابداری در محیط واقعی، سرور Node
+          همراه پروژه (پایانه <code dir="ltr" className="bg-card px-1.5 py-0.5 rounded">/api/v2</code>) با احراز هویت
+          JWT، نقش‌های دسترسی، لایسنس اشتراک و دیتابیس MySQL استفاده می‌شود. کنسول پایین برای آزمون محلی موتور
+          درون‌مرورگری است و داده‌ها را از همین دستگاه می‌خواند.
+        </div>
+      </Card>
+
       <Tabs active={tab} onChange={setTab}
         tabs={[
           { id: 'keys', label: 'کلیدهای API', icon: <KeyRound size={15} />, count: keys.length },
