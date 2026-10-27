@@ -43,15 +43,30 @@ export function hasSession() {
   return !!(accessToken || refreshToken);
 }
 
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function rawRequest(method: string, path: string, body?: unknown, retry = true): Promise<unknown> {
-  const res = await fetch(`/api/v2${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`/api/v2${path}`, {
+      method,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch (err) {
+    if ((err as DOMException)?.name === 'AbortError') {
+      throw new ApiError(504, 'REQUEST_TIMEOUT', 'زمان پاسخ سرور به پایان رسید؛ اتصال اینترنت یا سرور را بررسی کنید');
+    }
+    throw new ApiError(0, 'NETWORK_ERROR', 'ارتباط با سرور برقرار نشد؛ اگر سرور محلی را تازه روشن کرده‌اید چند لحظه دیگر تلاش کنید');
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (res.status === 401 && retry && refreshToken && !path.startsWith('/auth/')) {
     const ok = await tryRefresh();

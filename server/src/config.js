@@ -16,8 +16,9 @@ export const config = {
   mysql: {
     host: process.env.MYSQL_HOST || '127.0.0.1',
     port: toInt(process.env.MYSQL_PORT, 3306),
-    user: process.env.MYSQL_USER || 'faktorizm',
-    password: process.env.MYSQL_PASSWORD || 'faktorizm',
+    // از ?? استفاده می‌شود تا رمز خالی XAMPP (root بدون رمز) واقعا خالی بماند
+    user: process.env.MYSQL_USER ?? 'faktorizm',
+    password: process.env.MYSQL_PASSWORD ?? 'faktorizm',
     database: process.env.MYSQL_DATABASE || 'faktorizm',
     connectionLimit: toInt(process.env.MYSQL_POOL, 20),
   },

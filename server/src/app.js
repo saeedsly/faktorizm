@@ -1,6 +1,8 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { config } from './config.js';
 import { globalLimiter, authLimiter, errorHandler, notFoundHandler } from './middleware/index.js';
 import authRoutes from './routes/auth.routes.js';
@@ -30,8 +32,14 @@ export function createApp() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
+        // wasm-unsafe-eval برای هسته WASM موتور OCR و blob: برای ساخت ورکر آن لازم است
+        scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+        workerSrc: ["'self'", 'blob:'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:'],
         connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
       },
     },
@@ -62,6 +70,16 @@ export function createApp() {
   app.use('/api/v2/tickets', ticketRoutes);
   app.use('/api/v2/business', businessRoutes);
   app.use('/api/v2/audit', auditRoutes);
+
+  // سرو فرانت build‌شده روی همان پورت سرور (حالت تک‌سرویس در استقرار نهایی)
+  const webDir = process.env.WEB_DIR ? resolve(process.cwd(), process.env.WEB_DIR) : '';
+  if (webDir && existsSync(join(webDir, 'index.html'))) {
+    app.use(express.static(webDir, { index: false }));
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api/')) return next();
+      return res.sendFile(join(webDir, 'index.html'));
+    });
+  }
 
   app.use(notFoundHandler);
   app.use(errorHandler);

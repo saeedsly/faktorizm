@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/layout/Layout';
 import { RequireAuth, SubscriptionGate, PermissionGate } from './components/auth/Guards';
 import { useAppStore } from './lib/store';
@@ -40,13 +41,24 @@ function ScanLineIcon() {
   );
 }
 
-function Splash() {
+function Splash({ error, onRetry }: { error?: string; onRetry?: () => void }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-5">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-5 p-6 text-center">
       <span className="icon-tile h-16 w-16 rounded-2xl gradient-brand text-white animate-pulse-ring">
         <ScanLineIcon />
       </span>
-      <p className="text-sm text-muted-foreground font-semibold">در حال آماده‌سازی فاکتوریزم…</p>
+      {error ? (
+        <>
+          <p className="text-sm font-extrabold">آماده‌سازی با مشکل روبه‌رو شد</p>
+          <p className="text-xs text-muted-foreground max-w-sm leading-6">{error}</p>
+          <button onClick={onRetry}
+            className="h-10 px-6 rounded-xl gradient-brand text-white text-sm font-bold">
+            تلاش مجدد
+          </button>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground font-semibold">در حال آماده‌سازی فاکتوریزم…</p>
+      )}
     </div>
   );
 }
@@ -55,19 +67,33 @@ export default function App() {
   const { loaded, settings, load } = useAppStore();
   const { loading, bootstrap } = useAuth();
   const [ready, setReady] = useState(false);
+  const [bootError, setBootError] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      await load();
-      await bootstrap();
-      const s = useAppStore.getState().settings;
-      if (!s.seeded) {
-        try { await seedDemoData(); } catch (e) { console.warn(e); }
-      }
+  const boot = async () => {
+    setBootError('');
+    try {
+      // سگ نگهبان: هیچ مرحله‌ای نباید صفحه را برای همیشه روی اسپلش نگه دارد
+      await Promise.race([
+        (async () => {
+          try { await load(); } catch (e) { console.error('load settings failed', e); }
+          try { await bootstrap(); } catch (e) { console.error('auth bootstrap failed', e); }
+          const s = useAppStore.getState().settings;
+          if (!s.seeded) {
+            try { await seedDemoData(); } catch (e) { console.warn(e); }
+          }
+        })(),
+        new Promise((resolve) => setTimeout(resolve, 8000)),
+      ]);
       setReady(true);
-    })();
-  }, [load, bootstrap]);
+    } catch (e) {
+      console.error('boot failed', e);
+      setBootError('اتصال به سرویس‌های محلی برقرار نشد. اگر تازه سرور را راه‌اندازی کرده‌اید، چند لحظه صبر کنید و دوباره تلاش کنید.');
+    }
+  };
 
+  useEffect(() => { void boot(); }, []);
+
+  if (bootError) return <Splash error={bootError} onRetry={() => void boot()} />;
   if (!ready || loading || !loaded) return <Splash />;
 
   const gated = (el: React.ReactNode) => <SubscriptionGate>{el}</SubscriptionGate>;
@@ -75,6 +101,7 @@ export default function App() {
     <PermissionGate permission={permission}>{el}</PermissionGate>;
 
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Toaster position="top-center" dir="rtl" richColors closeButton toastOptions={{
         style: { fontFamily: 'inherit', borderRadius: '14px' },
@@ -112,5 +139,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

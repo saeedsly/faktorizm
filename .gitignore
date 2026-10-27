@@ -9,3 +9,4 @@ data/
 .tmp/
 *.tsbuildinfo
 *.traineddata
+release/
