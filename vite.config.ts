@@ -18,6 +18,10 @@ export default defineConfig({
       '/api': {
         target: process.env.API_TARGET || 'http://127.0.0.1:8787',
         changeOrigin: true,
+        // از دید سرور API این یک درخواست هم‌مبدا از گیت‌وی است؛ مبدای مرورگر نباید به CORS بخورد
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'));
+        },
       },
     },
   },
@@ -28,6 +32,9 @@ export default defineConfig({
       '/api': {
         target: process.env.API_TARGET || 'http://127.0.0.1:8787',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => proxyReq.removeHeader('origin'));
+        },
       },
     },
   },

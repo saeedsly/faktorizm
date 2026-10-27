@@ -11,6 +11,16 @@ import businessRoutes from './routes/business.routes.js';
 import auditRoutes from './routes/audit.routes.js';
 import healthRoutes from './routes/health.routes.js';
 
+// پشتیبانی از الگوی wildcard در CORS_ORIGINS، مثل https://*.example.com
+function isOriginAllowed(origin, allowed) {
+  if (allowed.includes(origin)) return true;
+  return allowed.some((pattern) => {
+    if (!pattern.includes('*')) return false;
+    const rx = new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+    return rx.test(origin);
+  });
+}
+
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
@@ -30,8 +40,11 @@ export function createApp() {
 
   app.use(cors({
     origin(origin, cb) {
-      if (!origin || config.corsOrigins.includes('*') || config.corsOrigins.includes(origin)) return cb(null, true);
-      cb(new Error('منشا درخواست در فهرست مجاز نیست'));
+      if (!origin || config.corsOrigins.includes('*') || isOriginAllowed(origin, config.corsOrigins)) return cb(null, true);
+      const err = new Error('منشا درخواست در فهرست مجاز نیست');
+      err.status = 403;
+      err.code = 'CORS_BLOCKED';
+      cb(err);
     },
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
