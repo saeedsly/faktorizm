@@ -8,6 +8,7 @@ import {
   ReceiptText, Wallet, Landmark, Clock3, ScanLine, Plus, ArrowLeft, Trophy, FileSpreadsheet,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { Card, CardTitle, StatCard, Badge, Button, EmptyState, Avatar } from '@/components/ui/primitives';
 import { db } from '@/lib/db';
 import { formatMoney, toFaDigits, STATUS_META, cn } from '@/lib/utils';
@@ -95,6 +96,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5 mt-5">
+       <ErrorBoundary compact>
         <Card className="lg:col-span-2">
           <CardTitle title="روند ماهانه فاکتورها" sub="مبلغ و تعداد روی تقویم شمسی" icon={<ReceiptText size={18} />} />
           {monthly.length === 0 ? (
@@ -121,7 +123,9 @@ export default function Dashboard() {
             </ResponsiveContainer>
           )}
         </Card>
+       </ErrorBoundary>
 
+       <ErrorBoundary compact>
         <Card>
           <CardTitle title="توزیع وضعیت‌ها" icon={<Clock3 size={18} />} />
           {statusPie.length === 0 ? (
@@ -150,6 +154,7 @@ export default function Dashboard() {
             </>
           )}
         </Card>
+       </ErrorBoundary>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-5 mt-5">

@@ -1,13 +1,13 @@
 import { Component, type ReactNode } from 'react';
-import { RefreshCcw, House, ShieldAlert } from 'lucide-react';
+import { RefreshCcw, House, ShieldAlert, TriangleAlert } from 'lucide-react';
 import { clearTokens } from '@/lib/api/client';
 
-interface Props { children: ReactNode }
+interface Props { children: ReactNode; compact?: boolean }
 interface State { hasError: boolean; message: string }
 
 /**
  * مرز خطای سراسری: هر خطای رندر به‌جای صفحه سفید، یک پنل فارسی قابل‌بازیابی نشان می‌دهد.
- * جزئیات فنی فقط در کنسول می‌ماند تا کاربر عادی سردرگم نشود.
+ * در حالت compact فقط همان بخش (مثلا نمودار) را با پیام جایگزین می‌کند تا بقیه صفحه سالم بماند.
  */
 export default class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, message: '' };
@@ -28,20 +28,40 @@ export default class ErrorBoundary extends Component<Props, State> {
     window.location.assign('/auth/login');
   };
 
+  private messageBox() {
+    return (
+      <pre dir="ltr" className="mt-3 max-w-full overflow-auto rounded-lg bg-muted p-3 text-[10px] leading-5 text-muted-foreground text-start whitespace-pre-wrap break-words">
+        {this.state.message || 'خطای ناشناخته'}
+      </pre>
+    );
+  }
+
   render() {
     if (!this.state.hasError) return this.props.children;
+
+    if (this.props.compact) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-muted-foreground">
+          <TriangleAlert size={24} className="text-warning" />
+          <p className="text-xs font-bold">این بخش موقتا خطا داد، ولی بقیه صفحه سالم است.</p>
+          {this.messageBox()}
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
-        <div className="card max-w-md w-full p-8 text-center animate-scale-in">
+        <div className="card max-w-lg w-full p-8 text-center animate-scale-in">
           <span className="icon-tile h-16 w-16 rounded-2xl bg-warning-soft text-warning mx-auto mb-4">
             <ShieldAlert size={30} />
           </span>
           <h2 className="text-lg font-extrabold mb-2">اجزای صفحه با مشکل مواجه شد</h2>
-          <p className="text-sm text-muted-foreground leading-7 mb-6">
-            داده‌های شما دست‌نخورده و روی همین دستگاه ذخیره است. این خطا معمولاً به‌خاطر نسخه قدیمی صفحه در
-            حافظه مرورگر رخ می‌دهد؛ یک بار تازه‌سازی کامل صفحه معمولاً مشکل را حل می‌کند.
+          <p className="text-sm text-muted-foreground leading-7 mb-4">
+            داده‌های شما دست‌نخورده و روی همین دستگاه ذخیره است. متن فنی خطا این پایین نوشته شده تا علت دقیق
+            مشخص باشد؛ یک بار تازه‌سازی کامل صفحه معمولا مشکل را حل می‌کند.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center">
+          {this.messageBox()}
+          <div className="flex flex-col sm:flex-row gap-2 justify-center mt-6">
             <button onClick={this.reload}
               className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl gradient-brand text-white text-sm font-bold">
               <RefreshCcw size={17} /> تازه‌سازی صفحه
