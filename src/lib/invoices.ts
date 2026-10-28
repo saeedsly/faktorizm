@@ -56,6 +56,7 @@ export function invoiceFromParsed(
     rawText: meta.rawText,
     ocrConfidence: meta.ocrConfidence,
     fieldConfidence: parsed.fieldConfidence,
+    ocrWarnings: parsed.warnings.length ? parsed.warnings : undefined,
     fileName: meta.fileName,
     fileType: meta.fileType,
     thumbnail: meta.thumbnail,

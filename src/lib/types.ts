@@ -39,6 +39,8 @@ export interface Invoice {
   rawText: string;
   ocrConfidence: number;
   fieldConfidence: FieldConfidence;
+  /** هشدارهای دستیار هوشمند OCR برای بازبینی انسانی */
+  ocrWarnings?: string[];
   fileName: string;
   fileType: string;
   thumbnail: string;

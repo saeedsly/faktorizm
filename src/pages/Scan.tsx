@@ -85,7 +85,7 @@ export default function Scan() {
           </Button>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mt-7">
-          {['OCR آفلاین فارسی', 'پیش‌پردازش خودکار', 'استخراج مالیات و اقلام', 'پردازش گروهی'].map((t) => (
+          {['OCR آفلاین فارسی', 'دستیار تصحیح و بازبینی', 'استخراج مالیات و اقلام', 'پردازش گروهی'].map((t) => (
             <span key={t} className="chip bg-muted text-muted-foreground"><ShieldCheck size={12} className="text-accent" /> {t}</span>
           ))}
         </div>
@@ -141,10 +141,16 @@ export default function Scan() {
                   {job.status === 'error' ? (
                     <p className="text-xs text-danger">{job.message}</p>
                   ) : job.status === 'done' ? (
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="text-accent font-semibold">استخراج شد</span>
                       <span>اطمینان OCR: {formatNumber(job.invoice?.ocrConfidence ?? 0)}٪</span>
                       <span className="hidden sm:inline">{job.invoice?.items.length} قلم کالا</span>
+                      {(job.invoice?.ocrWarnings?.length ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 text-warning font-semibold">
+                          <ShieldCheck size={13} />
+                          {formatNumber(job.invoice!.ocrWarnings!.length)} هشدار دستیار — نیاز به بازبینی
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">

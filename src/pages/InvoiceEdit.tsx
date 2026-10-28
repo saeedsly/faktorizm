@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { toast } from 'sonner';
 import {
   Save, Printer, Trash2, Plus, Trash, CheckCircle2, FileText, ScanText, Image as ImageIcon,
-  ShieldCheck, ChevronDown, X, Copy,
+  ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { Button, Card, CardTitle, Input, Textarea, Select, Label, Badge, Tabs, ConfidenceBar, EmptyState } from '@/components/ui/primitives';
@@ -44,6 +44,7 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
   const [dateText, setDateText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(true);
   const firstRef = useRef(true);
 
   const products = useLiveQuery(() => db.products.toArray(), []) ?? [];
@@ -343,6 +344,68 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
 
         {/* ستون کناری */}
         <div className="space-y-5">
+          {invoice.source === 'scan' && assistantOpen && (
+            <Card className="!p-4 border-primary/30 animate-slide-up">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-8 w-8 rounded-xl bg-primary-soft text-primary flex items-center justify-center">
+                    <Bot size={18} />
+                  </span>
+                  <div>
+                    <p className="text-sm font-extrabold">دستیار خوانش فاکتور</p>
+                    <p className="text-[11px] text-muted-foreground">تحلیل کاملاً آفلاین روی همین دستگاه</p>
+                  </div>
+                </div>
+                <button onClick={() => setAssistantOpen(false)} title="بستن"
+                  className="icon-tile h-7 w-7 text-muted-foreground hover:bg-muted"><X size={14} /></button>
+              </div>
+
+              <div className="flex items-center gap-3 mb-3">
+                <ConfidenceBar value={invoice.ocrConfidence} />
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                  اطمینان {toFaDigits(invoice.ocrConfidence)}٪
+                </span>
+              </div>
+
+              {lowConfidenceFields.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[11px] font-bold text-muted-foreground mb-1.5">فیلدهای نیازمند بازبینی</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {lowConfidenceFields.map(([f, v]) => (
+                      <span key={f}
+                        className={cn('text-[11px] px-2 py-0.5 rounded-full border',
+                          v >= 55 ? 'bg-warning-soft text-warning border-transparent'
+                            : 'bg-danger-soft text-danger border-transparent')}>
+                        {FIELD_LABELS[f] ?? f} · {toFaDigits(v)}٪
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(invoice.ocrWarnings?.length ?? 0) > 0 ? (
+                <ul className="space-y-2">
+                  {invoice.ocrWarnings!.map((w, i) => {
+                    const isInfo = /محاسبه شد|تصحیح شد/.test(w);
+                    return (
+                      <li key={i} className="flex items-start gap-2 text-xs leading-6">
+                        {isInfo
+                          ? <Info size={15} className="text-info shrink-0 mt-1" />
+                          : <AlertTriangle size={15} className="text-warning shrink-0 mt-1" />}
+                        <span className="text-foreground/90">{w}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-xs leading-6 text-accent flex items-start gap-2">
+                  <CheckCircle2 size={15} className="shrink-0 mt-1" />
+                  همه مبالغ و فیلدها با هم سازگارند؛ مورد مشکوکی برای بازبینی پیدا نشد.
+                </p>
+              )}
+            </Card>
+          )}
+
           <Card>
             <CardTitle title="پیش‌نمایش سند" icon={<ImageIcon size={18} />} />
             {invoice.thumbnail ? (

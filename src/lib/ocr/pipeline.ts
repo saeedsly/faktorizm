@@ -1,5 +1,8 @@
-import { recognizeText } from './engine';
-import { loadBitmap, bitmapToCanvas, makeThumbnail, enhanceCanvas, upscaleIfSmall } from './preprocess';
+import { recognizeBest } from './engine';
+import {
+  loadBitmap, bitmapToCanvas, makeThumbnail, enhanceCanvas, upscaleIfSmall,
+  grayscaleEnhance, deskewCanvas,
+} from './preprocess';
 import { renderPdfPages, isPdf, isImage } from './pdf';
 import { parseInvoiceText } from './parser';
 import { invoiceFromParsed } from '../invoices';
@@ -21,6 +24,17 @@ export interface ProcessResult {
 }
 
 export type StageCb = (stage: string, progress: number) => void;
+
+/** آماده‌سازی یک صفحه: بزرگ‌نمایی، تصحیح کجی و ساخت دو نسخه خاکستری/باینری */
+function preparePage(canvas: HTMLCanvasElement, autoPreprocess: boolean) {
+  let base = upscaleIfSmall(canvas);
+  const { canvas: straightened, angle } = deskewCanvas(base);
+  base = straightened;
+  if (!autoPreprocess) return { gray: base, binary: undefined, angle };
+  const gray = grayscaleEnhance(base);
+  const binary = enhanceCanvas(base);
+  return { gray, binary, angle };
+}
 
 export async function processFile(
   file: File,
@@ -50,26 +64,29 @@ export async function processFile(
 
   const textParts: string[] = [];
   let confSum = 0;
+  let deskewAngle = 0;
 
   for (let i = 0; i < canvases.length; i++) {
-    let canvas = upscaleIfSmall(canvases[i]);
-    if (settings.autoPreprocess) {
-      onStage(`بهبود کیفیت صفحه ${i + 1}`, 0.18 + (i / canvases.length) * 0.12);
-      canvas = enhanceCanvas(canvas);
-    }
-    onStage(`خواندن متن صفحه ${i + 1} از ${pages}`, 0.3 + (i / canvases.length) * 0.55);
-    const { text, confidence } = await recognizeText(canvas, settings, (_s, p) =>
-      onStage(`خواندن متن صفحه ${i + 1}`, 0.3 + ((i + p) / canvases.length) * 0.55),
+    onStage(`بهبود کیفیت و تصحیح کجی صفحه ${i + 1}`, 0.18 + (i / canvases.length) * 0.14);
+    const prepared = preparePage(canvases[i], settings.autoPreprocess);
+    deskewAngle = Math.max(deskewAngle, Math.abs(prepared.angle));
+
+    onStage(`خواندن متن صفحه ${i + 1} از ${pages}`, 0.34 + (i / canvases.length) * 0.55);
+    const { text, confidence } = await recognizeBest(prepared, settings, (_s, p) =>
+      onStage(`خواندن متن صفحه ${i + 1}`, 0.34 + ((i + p) / canvases.length) * 0.55),
     );
     textParts.push(text);
     confSum += confidence;
   }
 
-  onStage('استخراج هوشمند فیلدها', 0.92);
+  onStage('استخراج و تصحیح هوشمند فیلدها', 0.92);
   const rawText = textParts.join('\n\n');
   const confidence = Math.round(confSum / canvases.length);
   const fullSettings = settings ?? (await getSettings());
   const parsed = parseInvoiceText(rawText, confidence, fullSettings.defaultTaxRate);
+  if (deskewAngle >= 0.5) {
+    parsed.warnings.unshift(`سند حدود ${deskewAngle.toFixed(1)} درجه کج بود و پیش از خوانش تصحیح شد.`);
+  }
   const invoice = invoiceFromParsed(parsed, {
     fileName: file.name,
     fileType: file.type || 'application/octet-stream',
