@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/layout/Layout';
-import { RequireAuth, SubscriptionGate, PermissionGate } from './components/auth/Guards';
+import { RequireAuth, SubscriptionGate, PermissionGate, ServerOnlyGate } from './components/auth/Guards';
 import { useAppStore } from './lib/store';
 import { useAuth } from './stores/auth';
 import { seedDemoData } from './lib/seed';
@@ -102,7 +102,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <BrowserRouter>
+    <HashRouter>
       <Toaster position="top-center" dir="rtl" richColors closeButton toastOptions={{
         style: { fontFamily: 'inherit', borderRadius: '14px' },
       }} />
@@ -116,9 +116,9 @@ export default function App() {
         {/* بخش‌های نیازمند ورود */}
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           {/* بدون قفل اشتراک — حتی پس از انقضا در دسترس‌اند */}
-          <Route path="/subscription" element={<SubscriptionPage />} />
-          <Route path="/tickets" element={<Tickets />} />
-          <Route path="/security" element={<Security />} />
+          <Route path="/subscription" element={<ServerOnlyGate><SubscriptionPage /></ServerOnlyGate>} />
+          <Route path="/tickets" element={<ServerOnlyGate><Tickets /></ServerOnlyGate>} />
+          <Route path="/security" element={<ServerOnlyGate><Security /></ServerOnlyGate>} />
           <Route path="/about" element={<About />} />
           <Route path="/features" element={<Features />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -133,12 +133,12 @@ export default function App() {
           <Route path="/contacts" element={gated(<Contacts />)} />
           <Route path="/products" element={gated(<Products />)} />
           <Route path="/reports" element={gated(perm('report.read', <Reports />))} />
-          <Route path="/users" element={gated(perm('user.read', <UsersAdmin />))} />
+          <Route path="/users" element={<ServerOnlyGate>{gated(perm('user.read', <UsersAdmin />))}</ServerOnlyGate>} />
           <Route path="/api" element={gated(<ApiCenter />)} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
     </ErrorBoundary>
   );
 }

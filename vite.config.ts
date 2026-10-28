@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+  // مسیر نسبی تا بیلد در هر زیرپوشه‌ای (مثل htdocs/faktorizm) بدون تنظیم سرور کار کند
+  base: './',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

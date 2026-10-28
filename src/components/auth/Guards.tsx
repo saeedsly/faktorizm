@@ -17,11 +17,32 @@ function Splash() {
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { loading, authenticated } = useAuth();
+  const { loading, authenticated, localMode } = useAuth();
   const location = useLocation();
   if (loading) return <Splash />;
   if (!authenticated) {
     return <Navigate to="/auth/login" replace state={{ from: location.pathname }} />;
+  }
+  // در حالت آفلاین محلی، کاربر مالک فرضی است و مستقیم وارد برنامه می‌شود
+  if (localMode) return <>{children}</>;
+  return <>{children}</>;
+}
+
+/** صفحاتی که فقط با سرور کار می‌کنند (کاربران، تیکت، لایسنس آنلاین) در حالت محلی قفل‌اند */
+export function ServerOnlyGate({ children }: { children: ReactNode }) {
+  const { localMode } = useAuth();
+  if (localMode) {
+    return (
+      <div className="card p-10 text-center max-w-lg mx-auto">
+        <LockKeyhole size={30} className="mx-auto text-warning mb-3" />
+        <h3 className="font-extrabold mb-2">این بخش فقط در نسخه سروری فعال است</h3>
+        <p className="text-sm text-muted-foreground leading-7">
+          شما در حالت آفلاین محلی هستید و همه کارهای اصلی (اسکن، فاکتور، طرف حساب، گزارش و خروجی اکسل)
+          بدون اینترنت روی همین دستگاه کار می‌کنند. امکانات چندکاربره، تیکت و لایسنس آنلاین وقتی فعال
+          می‌شوند که برنامه به سرور متصل باشد.
+        </p>
+      </div>
+    );
   }
   return <>{children}</>;
 }

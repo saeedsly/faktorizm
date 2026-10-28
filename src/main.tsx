@@ -46,6 +46,8 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    // مسیر نسبی تا در زیرپوشه‌هایی مثل htdocs/faktorizm هم درست ثبت شود
+    const swUrl = new URL('sw.js', document.baseURI);
+    navigator.serviceWorker.register(swUrl).catch(() => undefined);
   });
 }

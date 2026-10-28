@@ -43,6 +43,26 @@ export function hasSession() {
   return !!(accessToken || refreshToken);
 }
 
+/**
+ * بررسی در دسترس بودن سرور با مهلت کوتاه.
+ * اگر سروری نباشد (استقرار صرفا استاتیک داخل htdocs) false برمی‌گرداند
+ * تا برنامه وارد «حالت آفلاین محلی» شود.
+ */
+export async function pingServer(timeoutMs = 2500): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch('/api/v2/health', { signal: controller.signal });
+    if (!res.ok) return false;
+    const json = await res.json().catch(() => null);
+    return !!(json && json.success === true);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const REQUEST_TIMEOUT_MS = 20_000;
 
 async function rawRequest(method: string, path: string, body?: unknown, retry = true): Promise<unknown> {

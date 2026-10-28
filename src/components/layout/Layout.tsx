@@ -13,7 +13,7 @@ import { onSyncChange, startAutoSync, stopAutoSync, fullSync, type SyncStatus } 
 import { cn, toFaDigits } from '@/lib/utils';
 import { toJalali } from '@/lib/jalali';
 
-interface NavItem { to: string; icon: typeof LayoutDashboard; label: string; end?: boolean; perm?: string; badge?: string }
+interface NavItem { to: string; icon: typeof LayoutDashboard; label: string; end?: boolean; perm?: string; badge?: string; serverOnly?: boolean }
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
@@ -35,10 +35,10 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: 'سازمان',
     items: [
-      { to: '/users', icon: UsersRound, label: 'کاربران و دسترسی‌ها', perm: 'user.read' },
-      { to: '/subscription', icon: Crown, label: 'اشتراک و لایسنس' },
-      { to: '/tickets', icon: LifeBuoy, label: 'تیکت پشتیبانی' },
-      { to: '/security', icon: ShieldCheck, label: 'مرکز امنیت' },
+      { to: '/users', icon: UsersRound, label: 'کاربران و دسترسی‌ها', perm: 'user.read', serverOnly: true },
+      { to: '/subscription', icon: Crown, label: 'اشتراک و لایسنس', serverOnly: true },
+      { to: '/tickets', icon: LifeBuoy, label: 'تیکت پشتیبانی', serverOnly: true },
+      { to: '/security', icon: ShieldCheck, label: 'مرکز امنیت', serverOnly: true },
     ],
   },
   {
@@ -78,16 +78,17 @@ export default function Layout() {
   const [query, setQuery] = useState('');
   const [userMenu, setUserMenu] = useState(false);
   const { settings, applyTheme } = useAppStore();
-  const { user, subscription, logout } = useAuth();
+  const { user, subscription, logout, localMode } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => { setMobileOpen(false); setUserMenu(false); }, [location.pathname]);
 
   useEffect(() => {
+    if (localMode) return; // در حالت آفلاین محلی، همگام‌سازی ابری وجود ندارد
     startAutoSync();
     return () => stopAutoSync();
-  }, []);
+  }, [localMode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -121,7 +122,9 @@ export default function Layout() {
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
         {NAV_GROUPS.map((group) => {
-          const items = group.items.filter((it) => !it.perm || can(user?.role, it.perm));
+          const items = group.items
+            .filter((it) => !it.serverOnly || !localMode)
+            .filter((it) => !it.perm || can(user?.role, it.perm));
           if (!items.length) return null;
           return (
             <div key={group.label}>
@@ -187,7 +190,12 @@ export default function Layout() {
           </form>
 
           <div className="mr-auto flex items-center gap-2">
-            <SyncButton />
+            {localMode && (
+              <span className="chip bg-warning-soft text-warning hidden sm:inline-flex" title="بدون سرور؛ همه داده‌ها روی همین دستگاه است">
+                <CloudOff size={12} /> آفلاین محلی
+              </span>
+            )}
+            {!localMode && <SyncButton />}
             <button
               onClick={() => setShortcutsOpen(true)}
               className="icon-tile h-10 w-10 hover:bg-muted text-muted-foreground hidden sm:inline-flex"
@@ -227,7 +235,11 @@ export default function Layout() {
                       <p className="text-sm font-bold truncate">{user?.name}</p>
                       <p className="text-[11px] text-muted-foreground truncate" dir="ltr">{user?.email}</p>
                       <div className="flex items-center gap-2 mt-2">
-                        {subscription?.active ? (
+                        {localMode ? (
+                          <span className="chip bg-warning-soft text-warning">
+                            <CloudOff size={11} /> حالت آفلاین محلی
+                          </span>
+                        ) : subscription?.active ? (
                           <span className="chip bg-accent-soft text-accent">
                             <Crown size={11} /> {subscription.source === 'trial' ? 'آزمایشی' : 'اشتراک فعال'} · {toFaDigits(subscription.daysLeft)} روز
                           </span>
@@ -238,12 +250,16 @@ export default function Layout() {
                         )}
                       </div>
                     </div>
-                    <button onClick={() => { navigate('/security'); setUserMenu(false); }}
-                      className="nav-link w-full"><ShieldCheck size={16} /> مرکز امنیت</button>
-                    <button onClick={() => { navigate('/subscription'); setUserMenu(false); }}
-                      className="nav-link w-full"><Crown size={16} /> مدیریت اشتراک</button>
-                    <button onClick={async () => { await logout(); navigate('/auth/login'); }}
-                      className="nav-link w-full text-danger hover:bg-danger-soft"><LogOut size={16} /> خروج از حساب</button>
+                    {!localMode && (
+                      <>
+                        <button onClick={() => { navigate('/security'); setUserMenu(false); }}
+                          className="nav-link w-full"><ShieldCheck size={16} /> مرکز امنیت</button>
+                        <button onClick={() => { navigate('/subscription'); setUserMenu(false); }}
+                          className="nav-link w-full"><Crown size={16} /> مدیریت اشتراک</button>
+                        <button onClick={async () => { await logout(); navigate('/auth/login'); }}
+                          className="nav-link w-full text-danger hover:bg-danger-soft"><LogOut size={16} /> خروج از حساب</button>
+                      </>
+                    )}
                   </div>
                 </>
               )}

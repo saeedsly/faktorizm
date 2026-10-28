@@ -1,5 +1,29 @@
 import { create } from 'zustand';
-import { api, setTokens, clearTokens, hasSession } from '@/lib/api/client';
+import { api, setTokens, clearTokens, hasSession, pingServer } from '@/lib/api/client';
+
+const LOCAL_MODE_KEY = 'fk_local_mode';
+
+const LOCAL_USER: AuthUser = {
+  id: 'local_owner',
+  workspace_id: 'local_workspace',
+  name: 'کاربر محلی',
+  email: 'local@offline.app',
+  phone: null,
+  role: 'owner',
+  totp_enabled: 0,
+  suspended: 0,
+  must_change_password: 0,
+  created_at: new Date().toISOString(),
+};
+
+const LOCAL_SUBSCRIPTION: Subscription = {
+  active: true,
+  source: 'license',
+  expiresAt: null,
+  daysLeft: 9999,
+  licenseExpiresAt: null,
+  trialExpiresAt: null,
+};
 
 export interface AuthUser {
   id: string;
@@ -28,6 +52,7 @@ interface AuthState {
   subscription: Subscription | null;
   loading: boolean;
   authenticated: boolean;
+  localMode: boolean;
   bootstrap: () => Promise<void>;
   login: (email: string, password: string) => Promise<{ twoFactorRequired?: boolean; challenge?: string }>;
   verify2fa: (challenge: string, code: string) => Promise<void>;
@@ -42,19 +67,37 @@ export const useAuth = create<AuthState>((set, get) => ({
   subscription: null,
   loading: true,
   authenticated: false,
+  localMode: localStorage.getItem(LOCAL_MODE_KEY) === '1',
 
   bootstrap: async () => {
-    if (!hasSession()) {
-      set({ loading: false, authenticated: false });
+    // حالت آفلاین محلی: استقرار استاتیک بدون سرور (مثل htdocs)
+    if (localStorage.getItem(LOCAL_MODE_KEY) === '1') {
+      set({
+        user: LOCAL_USER, subscription: LOCAL_SUBSCRIPTION,
+        authenticated: true, localMode: true, loading: false,
+      });
       return;
     }
-    try {
-      const data = await api.get('/auth/me') as { user: AuthUser; subscription: Subscription };
-      set({ user: data.user, subscription: data.subscription, authenticated: true, loading: false });
-    } catch {
-      clearTokens();
-      set({ user: null, authenticated: false, loading: false });
+    if (hasSession()) {
+      try {
+        const data = await api.get('/auth/me') as { user: AuthUser; subscription: Subscription };
+        set({ user: data.user, subscription: data.subscription, authenticated: true, loading: false });
+        return;
+      } catch {
+        clearTokens();
+      }
     }
+    // نشستی نیست؛ اگر سروری در دسترس نباشد، خودکار وارد حالت محلی شو
+    const online = await pingServer();
+    if (!online) {
+      localStorage.setItem(LOCAL_MODE_KEY, '1');
+      set({
+        user: LOCAL_USER, subscription: LOCAL_SUBSCRIPTION,
+        authenticated: true, localMode: true, loading: false,
+      });
+      return;
+    }
+    set({ user: null, authenticated: false, localMode: false, loading: false });
   },
 
   login: async (email, password) => {

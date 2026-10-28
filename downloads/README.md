@@ -1,7 +1,15 @@
-# بسته نصبی فاکتوریزم
+# بسته‌های نصبی فاکتوریزم
 
-- **faktorizm-xampp.zip** — بسته کامل نصب روی ویندوز (XAMPP + MySQL + Node).
-- دانلود مستقیم: https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
+## ۱) faktorizm-htdocs.zip — برای ویندوز ۷ و هر سیستم قدیمی (توصیه‌شده)
+نسخه کاملا آفلاین مرورگری؛ بدون نیاز به Node. فقط فایل‌ها را در پوشه htdocs کپی کنید.
+- دانلود: https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs.zip
+- نصب: پوشه `faktorizm` را در `C:\xampp\htdocs` کپی و آدرس `http://localhost/faktorizm/` را باز کنید.
+- قابلیت‌ها: OCR آفلاین، فاکتور، طرف حساب، کالا، گزارش و خروجی اکسل (داده داخل مرورگر).
 
-پس از دانلود: زیپ را Extract کنید، MySQL را در XAMPP روشن کنید، `setup.bat` و سپس `start.bat` را اجرا کنید.
-برنامه روی http://localhost:8787 باز می‌شود. ورود اولیه: `admin@faktorizm.ir` / `Admin@1405`.
+## ۲) faktorizm-xampp.zip — نسخه کامل سروری (ویندوز ۱۰ به بالا / سرور)
+با Node.js و MySQL؛ شامل احراز هویت، نقش‌ها، لایسنس، تیکت و API.
+- دانلود: https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
+- نیازمندی: Node.js 22 و MySQL (XAMPP). روی ویندوز ۷ قابل اجرا نیست چون Node 22 پشتیبانی نمی‌کند.
+- نصب: `setup.bat` سپس `start.bat` و باز کردن `http://localhost:8787`.
+
+ورود اولیه نسخه سروری: `admin@faktorizm.ir` / `Admin@1405`.
