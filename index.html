@@ -35,6 +35,56 @@
     </div>
 
     <script>
+      /* پلی‌فیل Iterator Helpers برای مرورگرهای فاقد آن (مثل Firefox < 131) — باید قبل از باندل اجرا شود */
+      (function () {
+        var g = typeof globalThis !== 'undefined' ? globalThis : window;
+        function getIterator(source) {
+          if (source == null) throw new TypeError('bad iterator source');
+          if (typeof source.next === 'function') return source;
+          var fn = source[Symbol.iterator];
+          if (typeof fn !== 'function') throw new TypeError('source is not iterable');
+          return fn.call(source);
+        }
+        function wrap(next) { var it = Object.create(g.Iterator.prototype); it.next = next; return it; }
+        if (typeof g.Iterator !== 'function' || typeof g.Iterator.prototype.map !== 'function') {
+          function Iterator() {}
+          Iterator.prototype[Symbol.iterator] = function () { return this; };
+          Iterator.prototype.next = function () { throw new TypeError('bad iterator'); };
+          Iterator.from = function (source) {
+            var inner = getIterator(source);
+            if (Object.getPrototypeOf(inner) === Iterator.prototype) return inner;
+            return wrap(function () { return inner.next(); });
+          };
+          Iterator.prototype.map = function (fn) { var s = this, i = 0; return wrap(function () { var r = s.next(); return r.done ? r : { value: fn(r.value, i++), done: false }; }); };
+          Iterator.prototype.filter = function (fn) { var s = this, i = 0; return wrap(function () { for (;;) { var r = s.next(); if (r.done) return r; if (fn(r.value, i++)) return r; } }); };
+          Iterator.prototype.take = function (limit) { var s = this, n = 0; return wrap(function () { if (n >= limit) return { value: undefined, done: true }; n++; return s.next(); }); };
+          Iterator.prototype.drop = function (limit) { var s = this, d = 0; return wrap(function () { while (d < limit) { d++; var r = s.next(); if (r.done) return r; } return s.next(); }); };
+          Iterator.prototype.takeWhile = function (fn) { var s = this, i = 0, stop = false; return wrap(function () { if (stop) return { value: undefined, done: true }; var r = s.next(); if (r.done || !fn(r.value, i++)) { stop = true; return { value: undefined, done: true }; } return r; }); };
+          Iterator.prototype.dropWhile = function (fn) { var s = this, i = 0, dropping = true; return wrap(function () { var r; while (dropping) { r = s.next(); if (r.done) return r; if (!fn(r.value, i++)) { dropping = false; return r; } } return s.next(); }); };
+          Iterator.prototype.flatMap = function (fn) { var s = this, inner = null, i = 0; return wrap(function () { for (;;) { if (inner) { var r = inner.next(); if (!r.done) return r; inner = null; } var o = s.next(); if (o.done) return o; inner = getIterator(fn(o.value, i++)); } }); };
+          Iterator.prototype.reduce = function (fn, acc) { var i = 0, r; if (arguments.length < 2) { r = this.next(); if (r.done) throw new TypeError('reduce of empty'); acc = r.value; i = 1; } for (;;) { r = this.next(); if (r.done) return acc; acc = fn(acc, r.value, i++); } };
+          Iterator.prototype.toArray = function () { var out = []; for (;;) { var r = this.next(); if (r.done) return out; out.push(r.value); } };
+          Iterator.prototype.forEach = function (fn) { var i = 0; for (;;) { var r = this.next(); if (r.done) return; fn(r.value, i++); } };
+          Iterator.prototype.some = function (fn) { var i = 0; for (;;) { var r = this.next(); if (r.done) return false; if (fn(r.value, i++)) return true; } };
+          Iterator.prototype.every = function (fn) { var i = 0; for (;;) { var r = this.next(); if (r.done) return true; if (!fn(r.value, i++)) return false; } };
+          Iterator.prototype.find = function (fn) { var i = 0; for (;;) { var r = this.next(); if (r.done) return undefined; if (fn(r.value, i++)) return r.value; } };
+          Iterator.prototype.findIndex = function (fn) { var i = 0; for (;;) { var r = this.next(); if (r.done) return -1; if (fn(r.value, i)) return i; i++; } };
+          Iterator.prototype.includes = function (v) { for (;;) { var r = this.next(); if (r.done) return false; if (r.value === v) return true; } };
+          Iterator.prototype.join = function (sep) { if (sep === undefined) sep = ','; return this.toArray().join(sep); };
+          g.Iterator = Iterator;
+        }
+        if (typeof g.AsyncIterator !== 'function') {
+          function AsyncIterator() {}
+          AsyncIterator.prototype[Symbol.asyncIterator] = function () { return this; };
+          AsyncIterator.prototype.next = function () { throw new TypeError('bad async iterator'); };
+          AsyncIterator.from = function (source) { var inner = getIterator(source); var it = Object.create(AsyncIterator.prototype); it.next = function () { return Promise.resolve(inner.next()); }; return it; };
+          AsyncIterator.prototype.toArray = function () { var self = this, out = []; return self.next().then(function loop(r) { if (r.done) return out; out.push(r.value); return self.next().then(loop); }); };
+          g.AsyncIterator = AsyncIterator;
+        }
+      })();
+    </script>
+
+    <script>
       // این اسکریپت عمدا با سینتکس قدیمی (ES5) نوشته شده تا روی هر مرورگری اجرا شود
       (function () {
         var errors = [];
