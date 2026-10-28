@@ -128,7 +128,7 @@ export default function Layout() {
           if (!items.length) return null;
           return (
             <div key={group.label}>
-              <p className="px-2 mb-1.5 text-[10px] font-bold text-muted-foreground/70 tracking-wider">{group.label}</p>
+              <p className="px-2 mb-1.5 text-[11px] font-bold text-muted-foreground/80">{group.label}</p>
               <div className="space-y-0.5">
                 {items.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.end}

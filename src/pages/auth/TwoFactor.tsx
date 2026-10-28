@@ -45,7 +45,7 @@ export default function TwoFactor() {
           <Label required>کد یک‌بارمصرف</Label>
           <Input
             dir="ltr" inputMode="numeric" maxLength={6} required
-            placeholder="------" className="text-center text-2xl tracking-[0.7em] h-14 font-bold"
+            placeholder="------" className="text-center text-2xl tracking-latin h-14 font-bold"
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
           />
