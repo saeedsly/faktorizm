@@ -1,0 +1,23 @@
+# Faktorizm static package - Apache config (XAMPP)
+# DirectorySlash (پیش‌فرض Apache) آدرس پوشه را خودکار به اسلش انتهایی هدایت می‌کند
+# تا مسیرهای نسبی دارایی‌ها همیشه درست resolve شوند.
+DirectoryIndex index.html
+
+# Correct MIME types for the offline OCR engine
+AddType application/wasm .wasm
+AddType application/javascript .js .mjs
+AddType application/gzip .gz
+AddType image/svg+xml .svg
+AddType application/manifest+json .webmanifest
+
+# UTF-8 for all text responses
+AddDefaultCharset UTF-8
+
+# Long cache for hashed/static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType application/wasm "access plus 30 days"
+  ExpiresByType application/gzip "access plus 30 days"
+  ExpiresByType text/css "access plus 30 days"
+  ExpiresByType application/javascript "access plus 30 days"
+</IfModule>

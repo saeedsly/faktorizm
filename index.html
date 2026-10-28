@@ -2,16 +2,84 @@
 <html lang="fa" dir="rtl" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0e1a" />
     <meta name="description" content="فاکتوریزم — سامانه هوشمند اسکن و استخراج خودکار فاکتور با بینایی ماشین، خروجی اکسل و API حسابداری" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
     <title>فاکتوریزم | سامانه هوشمند فاکتور</title>
+    <style>
+      #app-boot{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
+        background:#0a0e1a;color:#e8ecf6;font-family:Tahoma,Segoe UI,sans-serif;padding:20px}
+      #app-boot .b{max-width:560px;width:100%;background:#141a2c;border:1px solid #26304c;border-radius:18px;padding:30px;text-align:center}
+      #app-boot .sp{width:42px;height:42px;border:4px solid #2c3656;border-top-color:#6d5efc;border-radius:50%;margin:0 auto 18px;animation:spin 1s linear infinite}
+      @keyframes spin{to{transform:rotate(360deg)}}
+      #app-boot h1{font-size:18px;margin:0 0 8px}
+      #app-boot p{font-size:13px;color:#9aa6c2;line-height:2;margin:6px 0}
+      #app-boot pre{direction:ltr;text-align:left;background:#0c1120;border:1px solid #232c44;border-radius:10px;
+        padding:12px;font-size:11px;line-height:1.7;max-height:220px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:#f4a6a6}
+      #app-boot code{direction:ltr;background:#0c1120;padding:2px 8px;border-radius:6px;color:#a5b4fc}
+      #app-boot.hidden{display:none}
+    </style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+
+    <div id="app-boot">
+      <div class="b">
+        <div class="sp" id="boot-spinner"></div>
+        <h1 id="boot-title">در حال آماده‌سازی فاکتوریزم…</h1>
+        <p id="boot-msg">لطفاً چند لحظه صبر کنید.</p>
+      </div>
+    </div>
+
+    <script>
+      // این اسکریپت عمدا با سینتکس قدیمی (ES5) نوشته شده تا روی هر مرورگری اجرا شود
+      (function () {
+        var errors = [];
+        var bundleFailed = false;
+        function $(id) { return document.getElementById(id); }
+        function showFail(title, detail) {
+          var sp = $('boot-spinner'); if (sp) sp.style.display = 'none';
+          $('boot-title').innerHTML = title;
+          var msg = $('boot-msg');
+          msg.innerHTML = 'مرورگر شما: <code>' + (navigator.userAgent || 'نامشخص') + '</code>';
+          var pre = document.createElement('pre');
+          pre.innerHTML = detail || (errors.length ? errors.join('\n') : 'جزئیات بیشتری در دسترس نیست.');
+          msg.parentNode.appendChild(pre);
+          var tip = document.createElement('p');
+          tip.style.color = '#fbbf24';
+          tip.innerHTML = 'راهنمای کلی: از مرورگر Chrome یا Firefox نسخه نسبتا جدید استفاده کنید و آدرس را با <code>http://</code> (نه https) و با اسلش انتهایی باز کنید، مثل <code>http://127.0.0.1/faktorizm/</code>';
+          msg.parentNode.appendChild(tip);
+        }
+        window.addEventListener('error', function (e) {
+          var t = e.target;
+          if (t && t.tagName === 'SCRIPT') { bundleFailed = true; errors.push('فایل اسکریپت لود نشد: ' + (t.src || 'نامشخص')); return; }
+          if (t && t.tagName === 'LINK') { errors.push('فایل استایل لود نشد: ' + (t.href || 'نامشخص')); return; }
+          var m = e.message || String(e.error || 'خطای ناشناخته');
+          if (e.filename) { m += '  @ ' + e.filename + (e.lineno ? ':' + e.lineno : ''); }
+          errors.push(m);
+        }, true);
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason; errors.push('Promise: ' + (r && r.message ? r.message : String(r)));
+        });
+        // ناظر: اگر تا ۱۰ ثانیه بعد React رندر نشد، یعنی باندل لود/اجرا نشده
+        setTimeout(function () {
+          var root = $('root');
+          if (!root || root.children.length === 0) {
+            if (bundleFailed) {
+              showFail('فایل اصلی برنامه پیدا نشد (خطای ۴۰۴)',
+                'فایل جاوااسکریپت از مسیر درست خوانده نشد.\nمحتمل‌ترین علت: آدرس بدون اسلش انتهایی یا کپی اشتباه پوشه.\nمطمئن شوید این فایل وجود دارد:\nC:\\xampp\\htdocs\\faktorizm\\index.html\nو آدرس را دقیقا به این شکل باز کنید:\nhttp://127.0.0.1/faktorizm/\n\n' + errors.join('\n'));
+            } else {
+              showFail('برنامه اجرا نشد', errors.length ? errors.join('\n') : 'مرورگر ممکن است خیلی قدیمی باشد یا جاوااسکریپت غیرفعال باشد.');
+            }
+          }
+        }, 10000);
+        window.__markBundleFail = function () { bundleFailed = true; };
+        window.__hideBoot = function () { var b = $('app-boot'); if (b) b.className = 'hidden'; };
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx" onerror="window.__markBundleFail && window.__markBundleFail()"></script>
   </body>
 </html>

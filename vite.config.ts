@@ -41,7 +41,8 @@ export default defineConfig({
     },
   },
   build: {
-    target: 'es2022',
+    // es2020 با مرورگرهای قابل نصب روی ویندوز ۷ (Chrome 87+/Firefox 78+) سازگار است
+    target: 'es2020',
     chunkSizeWarningLimit: 2500,
   },
 });

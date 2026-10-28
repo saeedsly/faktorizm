@@ -44,6 +44,15 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
+// پنهان‌کردن صفحه بوت تعبیه‌شده در index.html پس از رندر موفق React
+requestAnimationFrame(() => {
+  const boot = document.getElementById('app-boot');
+  if (boot) {
+    boot.classList.add('hidden');
+    setTimeout(() => boot.remove(), 400);
+  }
+});
+
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     // مسیر نسبی تا در زیرپوشه‌هایی مثل htdocs/faktorizm هم درست ثبت شود
