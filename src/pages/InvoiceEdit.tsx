@@ -4,7 +4,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { toast } from 'sonner';
 import {
   Save, Printer, Trash2, Plus, Trash, CheckCircle2, FileText, ScanText, Image as ImageIcon,
-  ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info,
+  ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info, Maximize2,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import { Button, Card, CardTitle, Input, Textarea, Select, Label, Badge, Tabs, ConfidenceBar, EmptyState } from '@/components/ui/primitives';
@@ -43,6 +43,7 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
   const [tagInput, setTagInput] = useState('');
   const [dateText, setDateText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(true);
   const firstRef = useRef(true);
@@ -409,10 +410,16 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
           <Card>
             <CardTitle title="پیش‌نمایش سند" icon={<ImageIcon size={18} />} />
             {invoice.thumbnail ? (
-              <a href={invoice.thumbnail} target="_blank" rel="noreferrer"
-                className="block rounded-xl overflow-hidden border border-border group">
+              <button
+                onClick={() => setZoom(true)}
+                className="block w-full rounded-xl overflow-hidden border border-border group relative"
+                title="بزرگ‌نمایی سند"
+              >
                 <img src={invoice.thumbnail} alt="سند" className="w-full object-cover group-hover:scale-[1.02] transition-transform" />
-              </a>
+                <span className="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg bg-black/65 px-2 py-1 text-[11px] font-semibold text-white">
+                  <Maximize2 size={12} /> بزرگ‌نمایی
+                </span>
+              </button>
             ) : (
               <div className="rounded-xl bg-muted h-44 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                 <FileText size={28} />
@@ -423,6 +430,26 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
               <p className="text-[11px] text-muted-foreground mt-2 text-center">{toFaDigits(invoice.pages)} صفحه · {invoice.fileName}</p>
             )}
           </Card>
+
+          {zoom && invoice.thumbnail && (
+            <div
+              className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4"
+              onClick={() => setZoom(false)}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="relative max-h-full max-w-5xl overflow-auto rounded-2xl bg-white p-2 shadow-2xl">
+                <img src={invoice.thumbnail} alt="سند" className="max-h-[85vh] w-auto" />
+                <button
+                  onClick={() => setZoom(false)}
+                  className="absolute left-3 top-3 rounded-lg bg-black/70 p-2 text-white"
+                  title="بستن"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+          )}
 
           <Card>
             <CardTitle title="جمع‌بندی مالی" />

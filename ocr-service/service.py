@@ -19,91 +19,20 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.environ.get('OCR_MODEL_DIR', os.path.join(BASE_DIR, 'models'))
+from pipeline import engine_error, get_engine, recognize_bytes
+
 PORT = int(os.environ.get('OCR_PORT', '8789'))
 MAX_BODY = 25 * 1024 * 1024  # حداکثر ۲۵ مگابایت برای هر تصویر
 
-# بارگذاری تنبل موتور تا /health پیش از آماده‌شدن هم پاسخ بدهد
-_engine = None
-_engine_error = None
-
-
-def get_engine():
-    global _engine, _engine_error
-    if _engine is None and _engine_error is None:
-        try:
-            from rapidocr import RapidOCR
-            _engine = RapidOCR(params={
-                'Det.model_path': os.path.join(MODEL_DIR, 'PP-OCRv5_mobile_det.onnx'),
-                'Cls.model_path': os.path.join(MODEL_DIR, 'cls.onnx'),
-                'Rec.model_path': os.path.join(MODEL_DIR, 'arabic_PP-OCRv5_mobile_rec.onnx'),
-                'Rec.rec_keys_path': os.path.join(MODEL_DIR, 'arabic_dict.txt'),
-                # عرض بیشتر برای مبالغ بلند فاکتور تا رقم‌ها بریده نشوند
-                'Rec.rec_img_shape': [3, 48, 640],
-                # حفظ جزئیات اسکن‌های بزرگ (پیش‌فرض ۷۳۶ باعث از دست‌رفتن ستون‌ها می‌شد)
-                'Det.limit_side_len': 1280,
-            })
-        except Exception as exc:  # noqa: BLE001 — خطا باید به کاربر گزارش شود
-            _engine_error = f'{type(exc).__name__}: {exc}'
-    return _engine
-
-
-def reconstruct_rows(boxes, txts, scores):
-    """جعبه‌های تک‌خطی را به ردیف‌های جدول تبدیل می‌کند (ترتیب راست‌به‌چپ)."""
-    items = []
-    for box, text, score in zip(boxes, txts, scores):
-        ys = [p[1] for p in box]
-        xs = [p[0] for p in box]
-        items.append({
-            'text': str(text),
-            'score': round(float(score), 4),
-            'box': [[round(float(x), 1), round(float(y), 1)] for x, y in box],
-            'cy': sum(ys) / 4.0, 'ymin': min(ys), 'ymax': max(ys),
-            'xmin': min(xs), 'xmax': max(xs),
-        })
-    items.sort(key=lambda i: i['ymin'])
-    rows = []
-    for it in items:
-        for row in rows:
-            # هم‌ردیف اگر بازه عمودی هم‌پوشانی قابل توجه داشته باشد
-            if not (it['ymax'] < row['ymin'] - 6 or it['ymin'] > row['ymax'] + 6):
-                row['items'].append(it)
-                row['ymin'] = min(row['ymin'], it['ymin'])
-                row['ymax'] = max(row['ymax'], it['ymax'])
-                break
-        else:
-            rows.append({'ymin': it['ymin'], 'ymax': it['ymax'], 'items': [it]})
-
-    lines = []
-    for row in sorted(rows, key=lambda r: r['ymin']):
-        ordered = sorted(row['items'], key=lambda i: -i['xmin'])  # راست‌ترین جعبه اول
-        line_text = ' '.join(i['text'] for i in ordered)
-        lines.append({
-            'text': line_text,
-            'confidence': round(sum(i['score'] for i in ordered) / len(ordered), 4),
-            'boxes': [i['box'] for i in ordered],
-        })
-    return lines
-
 
 def recognize(image_bytes):
-    engine = get_engine()
-    if engine is None:
-        raise RuntimeError(_engine_error or 'OCR engine not ready')
+    """خوانش کامل تصویر با خط لوله چندنسخه‌ای (پیش‌پردازش + ترکیب + بازخوانی)."""
+    if get_engine() is None:
+        raise RuntimeError(engine_error() or 'OCR engine not ready')
     started = time.perf_counter()
-    result = engine(image_bytes)
-    elapsed_ms = round((time.perf_counter() - started) * 1000)
-    if not result.txts:
-        return {'lines': [], 'text': '', 'confidence': 0, 'elapsedMs': elapsed_ms}
-    lines = reconstruct_rows(result.boxes, result.txts, result.scores)
-    confidence = round(float(sum(result.scores) / len(result.scores)) * 100, 1)
-    return {
-        'lines': lines,
-        'text': '\n'.join(line['text'] for line in lines),
-        'confidence': confidence,
-        'elapsedMs': elapsed_ms,
-    }
+    result = recognize_bytes(image_bytes)
+    result['elapsedMs'] = round((time.perf_counter() - started) * 1000)
+    return result
 
 
 def parse_multipart(body, content_type):
@@ -120,7 +49,7 @@ def parse_multipart(body, content_type):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'FaktorizmOCR/1.0'
+    server_version = 'FaktorizmOCR/2.0'
 
     def _send(self, code, payload):
         data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
@@ -137,7 +66,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200 if ready else 503, {
                 'ok': ready,
                 'engine': 'RapidOCR PP-OCRv5 (arabic/persian, onnxruntime)',
-                'error': None if ready else _engine_error,
+                'pipeline': 'multi-variant + reread + rtl-reconstruct',
+                'error': None if ready else engine_error(),
             })
         else:
             self._send(404, {'ok': False, 'error': 'not found'})
@@ -159,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(400, {'ok': False, 'error': 'no file in multipart body'})
                     return
             else:
-                image = body  # خام image/png | image/jpeg | application/pdf(صفحه اول توسط پروکسی)
+                image = body  # خام image/png | image/jpeg
             payload = recognize(image)
             self._send(200, {'ok': True, **payload})
         except Exception as exc:  # noqa: BLE001
@@ -173,7 +103,7 @@ def main():
     print('[ocr-service] warming up PP-OCRv5 engine ...', flush=True)
     engine = get_engine()
     if engine is None:
-        print('[ocr-service] FATAL: engine failed to load:', _engine_error, flush=True)
+        print('[ocr-service] FATAL: engine failed to load:', engine_error(), flush=True)
         sys.exit(2)
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     print(f'[ocr-service] ready on http://127.0.0.1:{PORT}', flush=True)

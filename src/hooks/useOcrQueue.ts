@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { processFile } from '../lib/ocr/pipeline';
+import type { ProcessOptions } from '../lib/ocr/pipeline';
+import { requestAiConsent } from '../lib/ocr/aiConsent';
 import { getSettings } from '../lib/db';
 import { db } from '../lib/db';
 import { logActivity } from '../lib/activity';
@@ -39,17 +41,22 @@ export function useOcrQueue() {
         patch(jobId, { status: 'preparing', message: 'شروع پردازش', startedAt: Date.now() });
         try {
           const settings = await getSettings();
+          const processOptions: ProcessOptions = {
+            onAiConsent: ({ fileName, providerLabel }) =>
+              requestAiConsent({ fileName, providerLabel, filesCount: 1 }),
+          };
           const result = await processFile(file, settings, (stage, progress) => {
             patch(jobId,
               progress > 0.5 ? { status: 'recognizing', progress, message: stage }
                 : { status: 'preparing', progress, message: stage });
-          });
+          }, processOptions);
           await db.invoices.put(result.invoice);
           logActivity('اسکن و استخراج فاکتور', 'invoice',
             `سند «${file.name}» با اطمینان ${result.confidence}٪ خوانده شد`, result.invoice.id);
           patch(jobId, {
-            status: 'done', progress: 100, message: 'با موفقیت استخراج شد',
-            invoice: result.invoice, thumbnail: result.meta.thumbnail, finishedAt: Date.now(),
+            status: 'done', progress: 100,
+            message: result.source === 'hybrid' ? 'با موتور ابری و محلی خوانده شد' : 'با موفقیت استخراج شد',
+            invoice: result.invoice, thumbnail: result.preview || result.meta.thumbnail, finishedAt: Date.now(),
           });
         } catch (err) {
           patch(jobId, {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import ErrorBoundary from './components/ErrorBoundary';
+import AiConsentDialog from './components/AiConsentDialog';
 import Layout from './components/layout/Layout';
 import { RequireAuth, SubscriptionGate, PermissionGate, ServerOnlyGate } from './components/auth/Guards';
 import { useAppStore } from './lib/store';
@@ -103,6 +104,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <HashRouter>
+      <AiConsentDialog />
       <Toaster position="top-center" dir="rtl" richColors closeButton toastOptions={{
         style: { fontFamily: 'inherit', borderRadius: '14px' },
       }} />

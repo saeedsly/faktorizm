@@ -102,6 +102,12 @@ export interface Activity {
   detail: string;
 }
 
+/** ارائه‌دهنده سرویس ابری خوانش فاکتور (کلید متعلق به خود کاربر) */
+export type AiProvider = 'gemini' | 'openai';
+
+/** حالت موتور خوانش: محلی آفلاین، ابری، یا ترکیبی (حداکثر دقت) */
+export type OcrEngineMode = 'local' | 'ai' | 'hybrid';
+
 export interface AppSettings {
   id: 'singleton';
   businessName: string;
@@ -115,6 +121,13 @@ export interface AppSettings {
   ocrLangs: 'fas' | 'eng' | 'fas+eng';
   ocrQuality: 'fast' | 'balanced' | 'accurate';
   autoPreprocess: boolean;
+  /** موتور خوانش؛ پیش‌فرض محلی و کاملاً آفلاین */
+  ocrEngine: OcrEngineMode;
+  aiProvider: AiProvider;
+  aiApiKey: string;
+  aiModel: string;
+  /** پیش از هر ارسال به سرویس ابری از کاربر تأیید گرفته شود */
+  aiAskEachTime: boolean;
   autoApproveThreshold: number;
   onboarded: boolean;
   seeded: boolean;

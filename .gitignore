@@ -12,3 +12,6 @@ data/
 *.tsbuildinfo
 *.traineddata
 release/
+
+# آزمون دقت OCR — پوشه‌های موقت
+scripts/ocr-bench/__pycache__/

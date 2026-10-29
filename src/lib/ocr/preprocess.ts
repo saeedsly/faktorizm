@@ -24,18 +24,23 @@ export function bitmapToCanvas(bitmap: ImageBitmap, maxDim = 2800): HTMLCanvasEl
   return canvas;
 }
 
-export function makeThumbnail(bitmap: ImageBitmap, maxDim = 360): string {
-  const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(1, Math.round(bitmap.width * scale));
-  const h = Math.max(1, Math.round(bitmap.height * scale));
+export function makeThumbnail(source: ImageBitmap | HTMLCanvasElement, maxDim = 720): string {
+  const srcW = 'width' in source ? source.width : 0;
+  const srcH = 'height' in source ? source.height : 0;
+  const scale = Math.min(1, maxDim / Math.max(srcW, srcH));
+  const w = Math.max(1, Math.round(srcW * scale));
+  const h = Math.max(1, Math.round(srcH * scale));
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#f8fafc';
   ctx.fillRect(0, 0, w, h);
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  return canvas.toDataURL('image/jpeg', 0.72);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(source as CanvasImageSource, 0, 0, w, h);
+  // تصویر پیش‌نمایش باید خوانا بماند؛ فشرده‌سازی ملایم به‌جای کیفیت پایین
+  return canvas.toDataURL('image/jpeg', 0.9);
 }
 
 function grayBytes(canvas: HTMLCanvasElement): { data: Uint8ClampedArray; ctx: CanvasRenderingContext2D } {
@@ -223,4 +228,15 @@ export function upscaleIfSmall(canvas: HTMLCanvasElement, minDim = 1800): HTMLCa
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(canvas, 0, 0, out.width, out.height);
   return out;
+}
+
+/** تبدیل کانواس بهبودیافته به JPEG برای ارسال به سرویس ابری */
+export function canvasToBlob(canvas: HTMLCanvasElement, quality = 0.94): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('تبدیل تصویر ناموفق بود'))),
+      'image/jpeg',
+      quality,
+    );
+  });
 }

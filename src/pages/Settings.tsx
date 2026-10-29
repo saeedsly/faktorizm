@@ -13,10 +13,12 @@ import { seedDemoData, wipeAllData } from '@/lib/seed';
 import { logActivity } from '@/lib/activity';
 import { toFaDigits } from '@/lib/utils';
 import { checkServerOcr } from '@/lib/ocr/serverEngine';
+import { AI_PROVIDERS, testAiConnection } from '@/lib/ocr/aiEngine';
 
 /** نشانگر موتور فعال OCR: سرویس محلی PP-OCRv5 یا موتور داخلی مرورگر */
 function EngineBadge() {
   const [state, setState] = useState<'checking' | 'v5' | 'tesseract'>('checking');
+
   useEffect(() => {
     let alive = true;
     checkServerOcr().then((up) => {
@@ -28,7 +30,7 @@ function EngineBadge() {
     return <Badge className="bg-muted text-muted-foreground">در حال بررسی موتور OCR…</Badge>;
   }
   if (state === 'v5') {
-    return <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">موتور فعال: PP-OCRv5 محلی (عربی/فارسی) — پشتیبان Tesseract 7</Badge>;
+    return <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">موتور محلی فعال: PP-OCRv5 (عربی/فارسی) — پشتیبان Tesseract 7</Badge>;
   }
   return <Badge className="bg-accent-soft text-accent">موتور فعال: Tesseract 7 — داده زبان فارسی ۴.۰ (درون‌مرورگر)</Badge>;
 }
@@ -37,6 +39,7 @@ export default function SettingsPage() {
   const { settings, update, applyTheme } = useAppStore();
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [wiping, setWiping] = useState(false);
+  const [aiState, setAiState] = useState<'idle' | 'checking' | 'ok' | 'fail'>('idle');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const s = settings;
@@ -119,7 +122,7 @@ export default function SettingsPage() {
 
         {/* OCR */}
         <Card>
-          <CardTitle title="موتور بینایی ماشین (OCR)" sub="کاملا آفلاین و روی همین مرورگر" icon={<Cpu size={18} />} />
+          <CardTitle title="موتور بینایی ماشین (OCR)" sub="پیش‌فرض آفلاین و محلی؛ حالت ابری اختیاری برای بالاترین دقت" icon={<Cpu size={18} />} />
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -142,10 +145,111 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between rounded-xl bg-muted p-3.5">
               <div>
                 <p className="text-sm font-semibold">پیش‌پردازش خودکار تصویر</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">باینری Otsu، کنتراست و بزرگ‌سازی اسناد کم‌کیفیت</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">افزایش کیفیت، حذف نویز، تصحیح کجی و باینری هوشمند پیش از خوانش</p>
               </div>
               <Switch checked={s.autoPreprocess} onChange={(v) => set({ autoPreprocess: v })} />
             </div>
+
+            <div className="rounded-xl border border-border p-3.5">
+              <p className="mb-2 text-sm font-semibold">حالت خوانش</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {([
+                  { id: 'local', title: 'آفلاین و محلی', desc: 'بدون اینترنت، داده از دستگاه خارج نمی‌شود' },
+                  { id: 'hybrid', title: 'ترکیبی (پیشنهادی)', desc: 'محلی + ابری و مقایسه نتیجه برای بالاترین دقت' },
+                  { id: 'ai', title: 'فقط ابری', desc: 'سریع‌ترین خوانش ساخت‌یافته؛ نیازمند اینترنت' },
+                ] as const).map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => set({ ocrEngine: mode.id })}
+                    className={`rounded-xl border p-3 text-right transition-all ${
+                      s.ocrEngine === mode.id
+                        ? 'border-primary bg-primary/10 ring-2 ring-primary/25'
+                        : 'border-border hover:border-primary/40'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{mode.title}</p>
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{mode.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {s.ocrEngine !== 'local' && (
+              <div className="space-y-3 rounded-xl border border-border p-3.5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>سرویس ابری</Label>
+                    <Select
+                      value={s.aiProvider}
+                      onChange={(e) => set({ aiProvider: e.target.value as typeof s.aiProvider, aiModel: '' })}
+                    >
+                      <option value="gemini">گوگل Gemini</option>
+                      <option value="openai">OpenAI</option>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>مدل (خالی = پیش‌فرض)</Label>
+                    <Input
+                      dir="ltr"
+                      value={s.aiModel}
+                      placeholder={AI_PROVIDERS[s.aiProvider].defaultModel}
+                      onChange={(e) => set({ aiModel: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>کلید API</Label>
+                  <Input
+                    dir="ltr"
+                    type="password"
+                    autoComplete="off"
+                    value={s.aiApiKey}
+                    placeholder="کلید خودتان را اینجا وارد کنید"
+                    onChange={(e) => set({ aiApiKey: e.target.value.trim() })}
+                  />
+                  <p className="mt-1.5 text-[11px] leading-6 text-muted-foreground">
+                    کلید فقط روی همین دستگاه ذخیره می‌شود و برای دریافت آن به{' '}
+                    <a href={AI_PROVIDERS[s.aiProvider].keyUrl} target="_blank" rel="noreferrer"
+                      className="text-primary underline">صفحه کلید {AI_PROVIDERS[s.aiProvider].label}</a>{' '}
+                    مراجعه کنید.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-muted p-3">
+                  <div>
+                    <p className="text-sm font-semibold">هر بار بپرس</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">پیش از ارسال هر سند، اجازه بگیر</p>
+                  </div>
+                  <Switch checked={s.aiAskEachTime} onChange={(v) => set({ aiAskEachTime: v })} />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!s.aiApiKey.trim()) {
+                      toast.error('اول کلید API را وارد کنید');
+                      return;
+                    }
+                    setAiState('checking');
+                    const res = await testAiConnection({
+                      provider: s.aiProvider,
+                      apiKey: s.aiApiKey,
+                      model: s.aiModel,
+                    });
+                    setAiState(res.ok ? 'ok' : 'fail');
+                    if (res.ok) toast.success(`اتصال به ${AI_PROVIDERS[s.aiProvider].label} برقرار است`);
+                    else toast.error(`اتصال برقرار نشد: ${res.error ?? 'خطای نامشخص'}`);
+                  }}
+                >
+                  {aiState === 'checking' ? 'در حال بررسی…' : 'آزمون اتصال کلید'}
+                </Button>
+                {aiState === 'ok' && (
+                  <p className="text-[11px] font-semibold text-emerald-500">اتصال کلید تایید شد.</p>
+                )}
+                {aiState === 'fail' && (
+                  <p className="text-[11px] font-semibold text-red-500">اتصال برقرار نشد؛ کلید یا مدل را بررسی کنید.</p>
+                )}
+              </div>
+            )}
+
             <EngineBadge />
           </div>
         </Card>
