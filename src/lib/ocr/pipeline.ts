@@ -1,4 +1,5 @@
 import { recognizeBest } from './engine';
+import { recognizeViaServer } from './serverEngine';
 import {
   loadBitmap, bitmapToCanvas, makeThumbnail, enhanceCanvas, upscaleIfSmall,
   grayscaleEnhance, deskewCanvas,
@@ -65,6 +66,7 @@ export async function processFile(
   const textParts: string[] = [];
   let confSum = 0;
   let deskewAngle = 0;
+  let serverEngineUsed = false;
 
   for (let i = 0; i < canvases.length; i++) {
     onStage(`بهبود کیفیت و تصحیح کجی صفحه ${i + 1}`, 0.18 + (i / canvases.length) * 0.14);
@@ -72,6 +74,16 @@ export async function processFile(
     deskewAngle = Math.max(deskewAngle, Math.abs(prepared.angle));
 
     onStage(`خواندن متن صفحه ${i + 1} از ${pages}`, 0.34 + (i / canvases.length) * 0.55);
+
+    // موتور قوی سروری (RapidOCR PP-OCRv5)؛ در نبودش خودکار به Tesseract برمی‌گردیم
+    const serverResult = await recognizeViaServer(prepared.gray);
+    if (serverResult && serverResult.text.trim()) {
+      serverEngineUsed = true;
+      textParts.push(serverResult.text);
+      confSum += serverResult.confidence;
+      continue;
+    }
+
     const { text, confidence } = await recognizeBest(prepared, settings, (_s, p) =>
       onStage(`خواندن متن صفحه ${i + 1}`, 0.34 + ((i + p) / canvases.length) * 0.55),
     );
@@ -84,6 +96,9 @@ export async function processFile(
   const confidence = Math.round(confSum / canvases.length);
   const fullSettings = settings ?? (await getSettings());
   const parsed = parseInvoiceText(rawText, confidence, fullSettings.defaultTaxRate);
+  if (serverEngineUsed) {
+    parsed.warnings.unshift('این سند با موتور قوی PP-OCRv5 (پردازش محلی) خوانده شد.');
+  }
   if (deskewAngle >= 0.5) {
     parsed.warnings.unshift(`سند حدود ${deskewAngle.toFixed(1)} درجه کج بود و پیش از خوانش تصحیح شد.`);
   }

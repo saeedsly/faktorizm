@@ -11,6 +11,7 @@ import subscriptionRoutes from './routes/subscriptions.routes.js';
 import ticketRoutes from './routes/tickets.routes.js';
 import businessRoutes from './routes/business.routes.js';
 import auditRoutes from './routes/audit.routes.js';
+import ocrRoutes from './routes/ocr.routes.js';
 import healthRoutes from './routes/health.routes.js';
 
 // پشتیبانی از الگوی wildcard در CORS_ORIGINS، مثل https://*.example.com
@@ -59,11 +60,18 @@ export function createApp() {
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }));
 
+  // بدنه خام تصویر برای مسیر OCR باید قبل از پارسر JSON گرفته شود
+  app.use('/api/v2/ocr/recognize', express.raw({
+    type: ['image/*', 'application/octet-stream'], limit: '25mb',
+  }));
   app.use(express.json({ limit: config.jsonLimit }));
   app.use(express.urlencoded({ extended: false, limit: config.jsonLimit }));
 
   app.use(globalLimiter);
   app.use('/api/v2', healthRoutes);
+  // روتر OCR باید قبل از روترهای دارای authenticate سراسری mount شود
+  // (احراز هویت شناسایی/خوانش داخل خود روتر اعمال می‌شود)
+  app.use('/api/v2', ocrRoutes);
   app.use('/api/v2/auth', authLimiter, authRoutes);
   app.use('/api/v2/users', userRoutes);
   app.use('/api/v2', subscriptionRoutes);

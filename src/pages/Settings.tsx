@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Building2, Landmark, Cpu, Palette, DatabaseBackup, Info, Save, Upload, Download,
@@ -12,6 +12,26 @@ import { exportBackup, importBackup } from '@/lib/exporters/backup';
 import { seedDemoData, wipeAllData } from '@/lib/seed';
 import { logActivity } from '@/lib/activity';
 import { toFaDigits } from '@/lib/utils';
+import { checkServerOcr } from '@/lib/ocr/serverEngine';
+
+/** نشانگر موتور فعال OCR: سرویس محلی PP-OCRv5 یا موتور داخلی مرورگر */
+function EngineBadge() {
+  const [state, setState] = useState<'checking' | 'v5' | 'tesseract'>('checking');
+  useEffect(() => {
+    let alive = true;
+    checkServerOcr().then((up) => {
+      if (alive) setState(up ? 'v5' : 'tesseract');
+    });
+    return () => { alive = false; };
+  }, []);
+  if (state === 'checking') {
+    return <Badge className="bg-muted text-muted-foreground">در حال بررسی موتور OCR…</Badge>;
+  }
+  if (state === 'v5') {
+    return <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">موتور فعال: PP-OCRv5 محلی (عربی/فارسی) — پشتیبان Tesseract 7</Badge>;
+  }
+  return <Badge className="bg-accent-soft text-accent">موتور فعال: Tesseract 7 — داده زبان فارسی ۴.۰ (درون‌مرورگر)</Badge>;
+}
 
 export default function SettingsPage() {
   const { settings, update, applyTheme } = useAppStore();
@@ -126,7 +146,7 @@ export default function SettingsPage() {
               </div>
               <Switch checked={s.autoPreprocess} onChange={(v) => set({ autoPreprocess: v })} />
             </div>
-            <Badge className="bg-accent-soft text-accent">نسخه موتور: Tesseract 7 — داده زبان فارسی ۴.۰</Badge>
+            <EngineBadge />
           </div>
         </Card>
 

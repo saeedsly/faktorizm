@@ -35,7 +35,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { title: 'آپلود کشیدنی', desc: 'بارگذاری فایل با Drag & Drop و انتخاب چندفایلی همزمان', icon: Upload },
       { title: 'اسکن با دوربین', desc: 'عکاسی مستقیم با دوربین موبایل و وب‌کم', icon: Camera },
       { title: 'پشتیبانی PDF چندصفحه‌ای', desc: 'خواندن خودکار تمام صفحات فایل PDF', icon: FileText },
-      { title: 'OCR آفلاین فارسی و انگلیسی', desc: 'موتور تشخیص متن Tesseract روی دستگاه، بدون ارسال داده', icon: ScanText },
+      { title: 'OCR آفلاین فارسی و عربی', desc: 'موتور قوی PP-OCRv5 روی سرویس محلی و Tesseract داخل مرورگر به‌عنوان پشتیبان؛ بدون ارسال داده', icon: ScanText },
       { title: 'پیش‌پردازش هوشمند تصویر', desc: 'باینری Otsu، کنتراست و بزرگ‌سازی خودکار اسناد کم‌کیفیت', icon: Wand2 },
       { title: 'استخراج شماره فاکتور', desc: 'تشخیص خودکار شماره سند از الگوهای فارسی و لاتین', icon: Hash },
       { title: 'تشخیص هوشمند تاریخ', desc: 'پارس تاریخ شمسی، میلادی و نام ماه‌ها', icon: CalendarDays },

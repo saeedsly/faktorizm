@@ -43,6 +43,11 @@ export function hasSession() {
   return !!(accessToken || refreshToken);
 }
 
+/** توکن دسترسی جاری برای فراخوانی‌های باینری (مثل آپلود تصویر OCR) */
+export function getAccessToken(): string {
+  return accessToken || sessionStorage.getItem(ACCESS_KEY) || '';
+}
+
 /**
  * بررسی در دسترس بودن سرور با مهلت کوتاه.
  * اگر سروری نباشد (استقرار صرفا استاتیک داخل htdocs) false برمی‌گرداند

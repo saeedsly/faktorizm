@@ -1,0 +1,8 @@
+# Runtime dependencies of the Faktorizm local OCR service (PP-OCRv5 via RapidOCR)
+# Install on the target Windows machine with:
+#   python -m venv .venv
+#   .venv\Scripts\python -m pip install -r requirements.txt
+# For a fully offline install, put the wheels from scripts/fetch-python-wheels.sh
+# into ocr-service\wheels and setup.bat will use them automatically (--no-index).
+rapidocr==3.10.0
+onnxruntime==1.31.1
