@@ -90,18 +90,23 @@ interface PreparedPage {
 function preparePage(canvas: HTMLCanvasElement, autoPreprocess: boolean, autoCrop: boolean): PreparedPage {
   let base = canvas;
   let cropped = false;
-  if (autoCrop) {
-    const result = autoCropCanvas(base);
-    base = result.canvas;
-    cropped = result.cropped;
+  // پیش‌پردازش یک بهبود است، نه شرط پردازش؛ هر خطایی باید به تصویر اصلی برگردد
+  try {
+    if (autoCrop) {
+      const result = autoCropCanvas(base);
+      base = result.canvas;
+      cropped = result.cropped;
+    }
+    base = upscaleIfSmall(base);
+    const straightened = deskewCanvas(base);
+    base = straightened.canvas;
+    if (!autoPreprocess) return { gray: base, binary: undefined, angle: straightened.angle, cropped };
+    const gray = grayscaleEnhance(base);
+    const binary = enhanceCanvas(base);
+    return { gray, binary, angle: straightened.angle, cropped };
+  } catch {
+    return { gray: canvas, binary: undefined, angle: 0, cropped: false };
   }
-  base = upscaleIfSmall(base);
-  const { canvas: straightened, angle } = deskewCanvas(base);
-  base = straightened;
-  if (!autoPreprocess) return { gray: base, binary: undefined, angle, cropped };
-  const gray = grayscaleEnhance(base);
-  const binary = enhanceCanvas(base);
-  return { gray, binary, angle, cropped };
 }
 
 /** ساخت فاکتور از یک متن، با همه لایه‌های فهم */

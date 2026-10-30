@@ -9,6 +9,7 @@ import { payableOf } from '../lib/invoices';
 import { learnFromInvoice, getVendor, toVendorHint } from '../lib/vendors';
 import { logAudit } from '../lib/invoices/workflow';
 import { findDuplicates } from '../lib/ocr/fingerprint';
+import { friendlyError } from '../lib/ocr/errors';
 import type { OcrJob, Invoice } from '../lib/types';
 
 export interface EnqueueOptions {
@@ -115,7 +116,7 @@ export function useOcrQueue() {
           await saveResult(result, file, jobId);
         } catch (err) {
           patch(jobId, {
-            status: 'error', message: err instanceof Error ? err.message : 'خطای ناشناخته',
+            status: 'error', message: friendlyError(err),
             finishedAt: Date.now(),
           });
           logActivity('خطای پردازش سند', 'system', `سند «${file.name}»: ${String(err)}`);

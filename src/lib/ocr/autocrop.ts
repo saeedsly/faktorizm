@@ -119,6 +119,8 @@ export function findDocumentQuad(
 
 /** حل دستگاه معادلات برای هوموگرافی ۸ مجهولی (حذف گاوسی) */
 export function solveHomography(src: Point[], dst: Point[]): number[] | null {
+  // هوموگرافی به چهار نقطه متناظر نیاز دارد؛ با کمتر از آن معادله بی‌معنا می‌شود
+  if (src.length < 4 || dst.length < 4) return null;
   const a: number[][] = [];
   for (let i = 0; i < 4; i++) {
     const { x, y } = src[i];
@@ -143,6 +145,36 @@ export function solveHomography(src: Point[], dst: Point[]): number[] | null {
     }
   }
   return a.map((row) => row[8]);
+}
+
+/**
+ * تبدیل آفین دو مثلث (شش مجهول).
+ * برای کشیدن هر مثلث سند روی مثلث مقصد استفاده می‌شود؛ برخلاف هوموگرافی
+ * فقط به سه نقطه نیاز دارد.
+ */
+export function solveAffine(src: Point[], dst: Point[]): number[] | null {
+  const [p0, p1, p2] = src;
+  const [q0, q1, q2] = dst;
+  if (!p0 || !p1 || !p2 || !q0 || !q1 || !q2) return null;
+  const u1x = p1.x - p0.x;
+  const u1y = p1.y - p0.y;
+  const u2x = p2.x - p0.x;
+  const u2y = p2.y - p0.y;
+  const det = u1x * u2y - u1y * u2x;
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-9) return null;
+  const v1x = q1.x - q0.x;
+  const v1y = q1.y - q0.y;
+  const v2x = q2.x - q0.x;
+  const v2y = q2.y - q0.y;
+  // L = V · U⁻¹
+  const a = (v1x * u2y - v2x * u1y) / det;
+  const c = (v2x * u1x - v1x * u2x) / det;
+  const b = (v1y * u2y - v2y * u1y) / det;
+  const d = (v2y * u1x - v1y * u2x) / det;
+  const e = q0.x - (a * p0.x + c * p0.y);
+  const f = q0.y - (b * p0.x + d * p0.y);
+  const out = [a, b, c, d, e, f];
+  return out.every((value) => Number.isFinite(value)) ? out : null;
 }
 
 /** ابعاد مستطیل مقصد: بر پایه بلندترین ضلع قاب */
@@ -175,7 +207,8 @@ export function warpQuad(source: HTMLCanvasElement, quad: Quad): HTMLCanvasEleme
   const out = document.createElement('canvas');
   out.width = width;
   out.height = height;
-  const ctx = out.getContext('2d')!;
+  const ctx = out.getContext('2d');
+  if (!ctx) return source;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, width, height);
 
@@ -185,8 +218,9 @@ export function warpQuad(source: HTMLCanvasElement, quad: Quad): HTMLCanvasEleme
 
   // دو مثلث: (۰,۱,۲) و (۰,۲,۳)
   const drawTriangle = (a: Point, b: Point, c: Point, da: Point, db: Point, dc: Point) => {
-    const m = solveHomography([a, b, c], [da, db, dc]);
+    const m = solveAffine([a, b, c], [da, db, dc]);
     if (!m) return;
+    // m = [a, b, c, d, e, f] با ترتیب setTransform(a, b, c, d, e, f)
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(da.x, da.y);
@@ -194,7 +228,7 @@ export function warpQuad(source: HTMLCanvasElement, quad: Quad): HTMLCanvasEleme
     ctx.lineTo(dc.x, dc.y);
     ctx.closePath();
     ctx.clip();
-    ctx.setTransform(m[0], m[3], m[1], m[4], m[2], m[5]);
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
     ctx.drawImage(source, 0, 0);
     ctx.restore();
   };
@@ -205,6 +239,15 @@ export function warpQuad(source: HTMLCanvasElement, quad: Quad): HTMLCanvasEleme
 
 /** برش خودکار سند از عکس؛ اگر قاب مطمئن نبود همان تصویر برمی‌گردد */
 export function autoCropCanvas(canvas: HTMLCanvasElement): { canvas: HTMLCanvasElement; cropped: boolean } {
+  // برش یک بهبود اختیاری است؛ هیچ خطایی نباید پردازش سند را متوقف کند
+  try {
+    return autoCropUnsafe(canvas);
+  } catch {
+    return { canvas, cropped: false };
+  }
+}
+
+function autoCropUnsafe(canvas: HTMLCanvasElement): { canvas: HTMLCanvasElement; cropped: boolean } {
   const maxW = 600;
   const scale = Math.min(1, maxW / Math.max(canvas.width, canvas.height));
   const w = Math.max(20, Math.round(canvas.width * scale));
@@ -212,7 +255,8 @@ export function autoCropCanvas(canvas: HTMLCanvasElement): { canvas: HTMLCanvasE
   const small = document.createElement('canvas');
   small.width = w;
   small.height = h;
-  const sctx = small.getContext('2d', { willReadFrequently: true })!;
+  const sctx = small.getContext('2d', { willReadFrequently: true });
+  if (!sctx) return { canvas, cropped: false };
   sctx.drawImage(canvas, 0, 0, w, h);
   const gray = toGray(sctx.getImageData(0, 0, w, h).data);
   const quad = findDocumentQuad(gray, w, h);
@@ -236,6 +280,14 @@ export interface PhotoQuality {
 
 /** سنجش کیفیت عکس: تاری، نور و بازتاب */
 export function photoQuality(canvas: HTMLCanvasElement): PhotoQuality {
+  try {
+    return photoQualityUnsafe(canvas);
+  } catch {
+    return { sharpness: 0, brightness: 0, glare: 0, verdict: 'fair', hints: ['سنجش کیفیت برای این تصویر ممکن نشد؛ خوانش ادامه پیدا می‌کند.'] };
+  }
+}
+
+function photoQualityUnsafe(canvas: HTMLCanvasElement): PhotoQuality {
   const maxW = 700;
   const scale = Math.min(1, maxW / Math.max(canvas.width, canvas.height));
   const w = Math.max(16, Math.round(canvas.width * scale));
@@ -243,7 +295,8 @@ export function photoQuality(canvas: HTMLCanvasElement): PhotoQuality {
   const small = document.createElement('canvas');
   small.width = w;
   small.height = h;
-  const ctx = small.getContext('2d', { willReadFrequently: true })!;
+  const ctx = small.getContext('2d', { willReadFrequently: true });
+  if (!ctx) throw new Error('canvas 2d context unavailable');
   ctx.drawImage(canvas, 0, 0, w, h);
   const data = ctx.getImageData(0, 0, w, h).data;
   const gray = toGray(data);
