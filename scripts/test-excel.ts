@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { exportInvoicesXlsx, invoicesToCsv } from '../src/lib/exporters/excel';
 import { recalc } from '../src/lib/invoices';
-import { writeFileSync, existsSync, readdirSync, readFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, existsSync, readdirSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Invoice } from '../src/lib/types';
 
@@ -31,6 +31,7 @@ console.log('✅ CSV معتبر است (BOM فارسی و جداگر درست)')
 
 // --- XLSX با قالب همکاران سیستم ---
 const outDir = '/tmp/xlsx-test';
+rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 const origCwd = process.cwd();
 process.chdir(outDir);
@@ -47,6 +48,13 @@ for (const s of ['فاکتورها', 'اقلام', 'خلاصه', 'قالب هم�
 const row = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['فاکتورها'])[0];
 console.log('ردیف نمونه:', JSON.stringify(row).slice(0, 240));
 if (!row['مبلغ کل'] || !row['تاریخ شمسی']) throw new Error('ستون‌های کلیدی نیستند');
+// مبلغ نهایی سند (چاپ‌شده روی کاغذ) باید در شیت اقلام هم باشد
+const itemRow = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['اقلام'])[0];
+if (!('مبلغ نهایی سند' in itemRow)) throw new Error('ستون مبلغ نهایی سند در شیت اقلام نیست');
+const docInvoice = mkInvoice({ number: 'FK-DOC', documentTotal: 999000 });
+const docTotal = (docInvoice as unknown as { documentTotal: number }).documentTotal;
+if (docTotal !== 999000) throw new Error('مبلغ سند نگه داشته نشد');
+console.log('✅ ستون مبلغ نهایی سند در شیت اقلام هست');
 const tpl = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets['قالب همکاران سیستم'])[0];
 if (!tpl['بدهکار (ریال)']) throw new Error('قالب حسابداری درست ساخته نشده');
 if (!existsSync(join(outDir, produced))) throw new Error('فایل روی دیسک نیست');

@@ -21,10 +21,21 @@ export function computeTotals(items: InvoiceItem[], extraDiscount = 0) {
   return { subtotal, discountTotal: itemsDiscount, taxTotal, total: afterDiscount + taxTotal };
 }
 
+/**
+ * مبلغ نهایی سند: اگر سند مبلغ چاپ‌شده‌ای داشته باشد که با جمع ردیف‌ها نمی‌خوانَد،
+ * همان عددِ چاپ‌شده مرجع است؛ وگرنه جمع ردیف‌ها.
+ */
+export function payableOf(invoice: Invoice): number {
+  return invoice.documentTotal && invoice.documentTotal > 0 ? invoice.documentTotal : invoice.total;
+}
+
 export function recalc(invoice: Invoice): Invoice {
   const t = computeTotals(invoice.items, 0);
   invoice.discountTotal = t.discountTotal;
-  invoice.taxTotal = t.taxTotal;
+  // مالیات سند: اگر ردیف‌ها نرخ مالیات ندارند ولی سند مبلغ مالیات را نوشته،
+  // همان مبلغ سند مرجع است تا در گزارش‌ها گم نشود.
+  const documentBased = (invoice.documentTotal ?? 0) > 0;
+  invoice.taxTotal = documentBased ? Math.max(t.taxTotal, invoice.taxTotal || 0) : t.taxTotal;
   invoice.total = t.total;
   return invoice;
 }
@@ -49,6 +60,9 @@ export function invoiceFromParsed(
     discountTotal: parsed.discountTotal,
     taxTotal: parsed.taxTotal,
     total: parsed.total,
+    // سند معمولاً مبلغ نهایی را خودش می‌نویسد؛ نگهش می‌داریم تا با جمع ردیف‌های
+    // ناقص‌خوانده‌شده گم نشود.
+    documentTotal: parsed.total > 0 ? parsed.total : undefined,
     category: parsed.category,
     tags: [],
     note: '',

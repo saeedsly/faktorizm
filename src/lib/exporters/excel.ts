@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Invoice } from '../types';
 import { toLatinDigits, formatNumber } from '../utils';
+import { payableOf } from '../invoices';
 import { toJalali } from '../jalali';
 
 export type AccountingSoftware = 'generic' | 'sepidar' | 'hamkaran' | 'rayvarz' | 'parsian';
@@ -36,7 +37,8 @@ function invoicesSheet(invoices: Invoice[]): XLSX.WorkSheet {
     'تعداد اقلام': inv.items.length,
     'جمع تخفیف': inv.discountTotal,
     'مالیات بر ارزش افزوده': inv.taxTotal,
-    'مبلغ کل': inv.total,
+    'مبلغ کل': payableOf(inv),
+    'جمع ردیف‌ها': inv.total,
     'واحد پول': inv.currency === 'IRR' ? 'ریال' : 'تومان',
     'وضعیت': inv.status,
     'وضعیت پرداخت': inv.paymentStatus,
@@ -46,7 +48,7 @@ function invoicesSheet(invoices: Invoice[]): XLSX.WorkSheet {
     'فایل اصلی': inv.fileName,
   }));
   const ws = rtlSheet(XLSX.utils.json_to_sheet(rows));
-  setWidths(ws, [12, 16, 10, 14, 14, 28, 22, 16, 10, 14, 18, 16, 10, 12, 14, 14, 16, 24, 22]);
+  setWidths(ws, [12, 16, 10, 14, 14, 28, 22, 16, 10, 14, 18, 16, 14, 10, 12, 14, 14, 16, 24, 22]);
   return ws;
 }
 
@@ -71,20 +73,21 @@ function itemsSheet(invoices: Invoice[]): XLSX.WorkSheet {
         'درصد مالیات': it.taxRate,
         'مالیات ردیف': tax,
         'مبلغ نهایی ردیف': net + tax,
+        'مبلغ نهایی سند': payableOf(inv),
         'واحد پول': inv.currency === 'IRR' ? 'ریال' : 'تومان',
       };
     }),
   );
   const header = ['شماره فاکتور', 'تاریخ فاکتور', 'فروشنده', 'خریدار', 'ردیف',
     'شرح کالا / خدمت', 'تعداد', 'قیمت واحد', 'مبلغ ردیف (قبل از تخفیف)', 'تخفیف ردیف',
-    'مبلغ خالص', 'درصد مالیات', 'مالیات ردیف', 'مبلغ نهایی ردیف', 'واحد پول'];
+    'مبلغ خالص', 'درصد مالیات', 'مالیات ردیف', 'مبلغ نهایی ردیف', 'مبلغ نهایی سند', 'واحد پول'];
   const ws = rtlSheet(XLSX.utils.json_to_sheet(rows, { header }));
-  setWidths(ws, [16, 14, 26, 24, 7, 38, 10, 15, 20, 13, 15, 11, 14, 18, 10]);
+  setWidths(ws, [16, 14, 26, 24, 7, 38, 10, 15, 20, 13, 15, 11, 14, 18, 18, 10]);
   return ws;
 }
 
 function summarySheet(invoices: Invoice[]): XLSX.WorkSheet {
-  const total = invoices.reduce((s, i) => s + i.total, 0);
+  const total = invoices.reduce((s, i) => s + payableOf(i), 0);
   const tax = invoices.reduce((s, i) => s + i.taxTotal, 0);
   const discount = invoices.reduce((s, i) => s + i.discountTotal, 0);
   const rows = [

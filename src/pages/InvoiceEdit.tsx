@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import MoneyInput from '@/components/MoneyInput';
+import InvoiceSummary from '@/components/InvoiceSummary';
 import { Button, Card, CardTitle, Input, Textarea, Select, Label, Badge, Tabs, ConfidenceBar, EmptyState } from '@/components/ui/primitives';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { db } from '@/lib/db';
@@ -80,7 +81,12 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice]);
 
-  const totals = useMemo(() => invoice ? computeTotals(invoice.items) : null, [invoice]);
+  const totals = useMemo(() => {
+    if (!invoice) return null;
+    const t = computeTotals(invoice.items);
+    // مالیات و مبلغ سند ممکن است با جمع ردیف‌ها فرق داشته باشند؛ عدد سند مرجع نمایش است
+    return { ...t, taxTotal: invoice.taxTotal, total: t.subtotal - t.discountTotal + invoice.taxTotal };
+  }, [invoice]);
 
   if (!invoice || !totals) {
     return <div className="space-y-4">{[1, 2, 3].map((i) => <div key={i} className="skeleton h-28" />)}</div>;
@@ -352,9 +358,11 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
 
           {tab === 'ocr' && (
             <div className="space-y-5">
+              <InvoiceSummary invoice={invoice} />
+
               <Card>
                 <CardTitle title="اقلام خوانده‌شده از سند"
-                  sub={`${toFaDigits(invoice.items.length)} ردیف · مرتب‌شده بر پایه ستون‌های جدول`}
+                  sub={`${toFaDigits(invoice.items.length)} ردیف · فهمیده‌شده از متن سند`}
                   icon={<ScanText size={18} />}
                   action={invoice.ocrConfidence > 0 ? <ConfidenceBar value={invoice.ocrConfidence} /> : undefined} />
                 {invoice.items.length ? (
@@ -551,6 +559,18 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                 <span className="font-extrabold">مبلغ قابل پرداخت</span>
                 <span className="font-extrabold text-base gradient-text">{formatMoney(totals.total, invoice.currency)}</span>
               </div>
+              {invoice.documentTotal !== undefined && invoice.documentTotal > 0 && (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-muted-foreground">مبلغ نهایی چاپ‌شده روی سند</span>
+                  <button
+                    onClick={() => setInvoice((prev) => { const next = { ...prev!, documentTotal: undefined }; return recalc(next); })}
+                    title="اگر مبلغ سند اشتباه خوانده شده، حذفش کنید تا جمع ردیف‌ها ملاک شود"
+                    className="font-bold tabular-nums text-primary hover:underline"
+                  >
+                    {formatMoney(invoice.documentTotal, invoice.currency)}
+                  </button>
+                </div>
+              )}
             </div>
             <div className="mt-4 pt-4 border-t border-border space-y-2">
               <div className="flex items-center justify-between text-xs">

@@ -11,6 +11,8 @@ import { invoiceFromParsed } from '../invoices';
 import { getSettings } from '../db';
 import { recognizeWithAi, AI_PROVIDERS } from './aiEngine';
 import { applyStructuredItems } from './structured';
+import { analyzeInvoiceText, applyFreeTextAnalysis } from './freetext';
+import type { FreeMergeInfo } from './freetext';
 import { mergeAiIntoParsed } from './merge';
 import type { AiOcrResult } from './aiEngine';
 import type { AppSettings, Invoice } from '../types';
@@ -35,6 +37,8 @@ export interface ProcessResult {
   preview: string;
   /** خطای لایه ابری در صورت شکست (خوانش محلی انجام شده است) */
   aiError?: string;
+  /** خلاصه فهم نوشتاری سند (مستقل از ستون‌بندی) */
+  free?: FreeMergeInfo;
 }
 
 export type StageCb = (stage: string, progress: number) => void;
@@ -167,6 +171,15 @@ export async function processFile(
     parsed = applyStructuredItems(parsed, structuredItems, structuredTotals);
   }
 
+  // فهم نوشتاری متن: حتی وقتی جدول و ستون‌بندی از هم پاشیده است،
+  // عنوان کالاها و مبلغ هر قلم و مبلغ نهایی از متن فهمیده می‌شود.
+  const freeAnalysis = analyzeInvoiceText(rawText);
+  const withFree = applyFreeTextAnalysis(parsed, freeAnalysis, {
+    keepExistingItems: structuredItems.length > 0,
+  });
+  parsed = withFree;
+  const freeInfo = withFree.free;
+
   let source: OcrSource = 'local';
   if (serverEngineUsed) {
     parsed.warnings.unshift('این سند با موتور قوی PP-OCRv5 (پردازش محلی) خوانده شد.');
@@ -207,5 +220,6 @@ export async function processFile(
     source,
     preview,
     aiError: aiResult && !aiResult.ok ? aiResult.error : undefined,
+    free: freeInfo,
   };
 }

@@ -9,7 +9,8 @@ import PageHeader from '@/components/PageHeader';
 import CameraCapture from '@/components/CameraCapture';
 import { Button, Progress, EmptyState } from '@/components/ui/primitives';
 import { useOcrQueue } from '@/hooks/useOcrQueue';
-import { formatNumber, truncate } from '@/lib/utils';
+import { formatNumber, formatMoney, truncate } from '@/lib/utils';
+import { payableOf } from '@/lib/invoices';
 
 export default function Scan() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,6 +146,11 @@ export default function Scan() {
                       <span className="text-accent font-semibold">استخراج شد</span>
                       <span>اطمینان OCR: {formatNumber(job.invoice?.ocrConfidence ?? 0)}٪</span>
                       <span className="hidden sm:inline">{job.invoice?.items.length} قلم کالا</span>
+                      {job.invoice && (
+                        <span className="hidden md:inline font-semibold text-foreground/80">
+                          مبلغ نهایی: {formatMoney(payableOf(job.invoice), job.invoice.currency)}
+                        </span>
+                      )}
                       {(job.invoice?.ocrWarnings?.length ?? 0) > 0 && (
                         <span className="inline-flex items-center gap-1 text-warning font-semibold">
                           <ShieldCheck size={13} />

@@ -32,6 +32,8 @@ export interface Invoice {
   discountTotal: number;
   taxTotal: number;
   total: number;
+  /** مبلغ نهایی چاپ‌شده روی خود سند؛ اگر با جمع ردیف‌ها فرق داشته باشد همین عدد مرجع است */
+  documentTotal?: number;
   category: string;
   tags: string[];
   note: string;
