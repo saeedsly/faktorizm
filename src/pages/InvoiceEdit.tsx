@@ -7,6 +7,7 @@ import {
   ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info, Maximize2,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import MoneyInput from '@/components/MoneyInput';
 import { Button, Card, CardTitle, Input, Textarea, Select, Label, Badge, Tabs, ConfidenceBar, EmptyState } from '@/components/ui/primitives';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { db } from '@/lib/db';
@@ -44,6 +45,8 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
   const [dateText, setDateText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [zoom, setZoom] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+  const currencyLabel = (invoice?.currency ?? settings.currency) === 'IRR' ? 'ریال' : 'تومان';
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(true);
   const firstRef = useRef(true);
@@ -242,46 +245,50 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                   <Button size="sm" variant="outline" onClick={addItem}><Plus size={15} /> ردیف جدید</Button>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[820px] text-sm">
+                  <table className="w-full min-w-[900px] text-sm">
                     <thead>
-                      <tr className="text-[11px] text-muted-foreground border-y border-border bg-muted/50">
-                        <th className="p-3 text-right font-semibold w-10">#</th>
+                      <tr className="text-[11px] text-muted-foreground border-y border-border bg-muted/60">
+                        <th className="p-3 text-center font-semibold w-10">#</th>
                         <th className="p-3 text-right font-semibold">شرح کالا / خدمت</th>
-                        <th className="p-3 text-right font-semibold w-24">تعداد</th>
-                        <th className="p-3 text-right font-semibold w-36">قیمت واحد</th>
-                        <th className="p-3 text-right font-semibold w-28">تخفیف</th>
-                        <th className="p-3 text-right font-semibold w-24">مالیات ٪</th>
-                        <th className="p-3 text-left font-semibold w-36">مبلغ نهایی</th>
+                        <th className="p-3 text-center font-semibold w-24">تعداد</th>
+                        <th className="p-3 text-right font-semibold w-40">
+                          قیمت واحد <span className="font-normal">({currencyLabel})</span>
+                        </th>
+                        <th className="p-3 text-right font-semibold w-36">
+                          تخفیف <span className="font-normal">({currencyLabel})</span>
+                        </th>
+                        <th className="p-3 text-center font-semibold w-24">مالیات ٪</th>
+                        <th className="p-3 text-left font-semibold w-40">مبلغ نهایی</th>
                         <th className="w-16" />
                       </tr>
                     </thead>
                     <tbody>
                       {invoice.items.map((it, idx) => (
-                        <tr key={it.id} className="border-b border-border last:border-0 align-middle">
-                          <td className="p-2 text-xs text-muted-foreground text-center">{toFaDigits(idx + 1)}</td>
+                        <tr key={it.id} className="border-b border-border last:border-0 align-middle hover:bg-muted/30 transition-colors">
+                          <td className="p-2 text-xs text-muted-foreground text-center tabular-nums">{toFaDigits(idx + 1)}</td>
                           <td className="p-2">
                             <Input list="products-list" className="!py-2" value={it.title}
-                              onChange={(e) => patchItem(it.id, { title: e.target.value })} placeholder="نام کالا" />
+                              onChange={(e) => patchItem(it.id, { title: e.target.value })} placeholder="نام کالا یا خدمت" />
                           </td>
                           <td className="p-2">
-                            <Input type="number" min={0} className="!py-2" value={it.quantity}
+                            <Input type="number" min={0} className="!py-2 text-center tabular-nums" value={it.quantity}
                               onChange={(e) => patchItem(it.id, { quantity: Number(e.target.value) })} />
                           </td>
                           <td className="p-2">
-                            <Input type="number" min={0} className="!py-2" value={it.unitPrice || ''}
-                              onChange={(e) => patchItem(it.id, { unitPrice: Number(e.target.value) })} />
+                            <MoneyInput value={it.unitPrice} ariaLabel="قیمت واحد"
+                              onChange={(v) => patchItem(it.id, { unitPrice: v })} />
                           </td>
                           <td className="p-2">
-                            <Input type="number" min={0} className="!py-2" value={it.discount || ''}
-                              onChange={(e) => patchItem(it.id, { discount: Number(e.target.value) })} />
+                            <MoneyInput value={it.discount} ariaLabel="تخفیف"
+                              onChange={(v) => patchItem(it.id, { discount: v })} />
                           </td>
                           <td className="p-2">
-                            <Select className="!py-2" value={it.taxRate}
+                            <Select className="!py-2 text-center" value={it.taxRate}
                               onChange={(e) => patchItem(it.id, { taxRate: Number(e.target.value) })}>
-                              {[0, 9, 10].map((r) => <option key={r} value={r}>{toFaDigits(r)}٪</option>)}
+                              {[0, 6, 9, 10].map((r) => <option key={r} value={r}>{toFaDigits(r)}٪</option>)}
                             </Select>
                           </td>
-                          <td className="p-2 text-left font-bold text-[13px] whitespace-nowrap">
+                          <td className="p-2 text-left font-bold text-[13px] whitespace-nowrap tabular-nums">
                             {formatMoney(itemNet(it) + itemTax(it), invoice.currency)}
                           </td>
                           <td className="p-2">
@@ -294,7 +301,25 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                           </td>
                         </tr>
                       ))}
+                      {invoice.items.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-sm text-muted-foreground">
+                            هنوز ردیفی ثبت نشده است؛ با دکمه «ردیف جدید» یا اسکن فاکتور شروع کنید.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-border bg-muted/40 text-[13px]">
+                        <td colSpan={6} className="p-3 text-left font-semibold text-muted-foreground">
+                          جمع {toFaDigits(invoice.items.length)} ردیف
+                        </td>
+                        <td className="p-3 text-left font-extrabold tabular-nums">
+                          {formatMoney(totals.total, invoice.currency)}
+                        </td>
+                        <td />
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
                 <datalist id="products-list">
@@ -326,20 +351,85 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
           )}
 
           {tab === 'ocr' && (
-            <Card>
-              <CardTitle title="متن استخراج‌شده توسط موتور OCR"
-                sub={invoice.rawText ? `اطمینان کل: ${toFaDigits(invoice.ocrConfidence)}٪` : 'این سند به‌صورت دستی ثبت شده و متن OCR ندارد'}
-                icon={<ScanText size={18} />}
-                action={invoice.ocrConfidence > 0 ? <ConfidenceBar value={invoice.ocrConfidence} /> : undefined} />
-              {invoice.rawText ? (
-                <pre dir="auto" className="whitespace-pre-wrap text-xs leading-7 bg-muted rounded-xl p-4 max-h-[480px] overflow-y-auto font-sans">
-                  {invoice.rawText}
-                </pre>
-              ) : (
-                <EmptyState icon={<ScanText size={26} />} title="متن OCR موجود نیست"
-                  desc="فاکتورهای اسکن‌شده متن خام شناسایی‌شده را اینجا نگه می‌دارند." />
-              )}
-            </Card>
+            <div className="space-y-5">
+              <Card>
+                <CardTitle title="اقلام خوانده‌شده از سند"
+                  sub={`${toFaDigits(invoice.items.length)} ردیف · مرتب‌شده بر پایه ستون‌های جدول`}
+                  icon={<ScanText size={18} />}
+                  action={invoice.ocrConfidence > 0 ? <ConfidenceBar value={invoice.ocrConfidence} /> : undefined} />
+                {invoice.items.length ? (
+                  <div className="overflow-x-auto -mx-1">
+                    <table className="w-full min-w-[720px] text-[13px]">
+                      <thead>
+                        <tr className="text-[11px] text-muted-foreground border-b border-border">
+                          <th className="py-2 px-2 text-right font-semibold">شرح کالا / خدمت</th>
+                          <th className="py-2 px-2 text-center font-semibold w-20">تعداد</th>
+                          <th className="py-2 px-2 text-left font-semibold w-32">قیمت واحد</th>
+                          <th className="py-2 px-2 text-left font-semibold w-28">تخفیف</th>
+                          <th className="py-2 px-2 text-center font-semibold w-20">مالیات</th>
+                          <th className="py-2 px-2 text-left font-semibold w-32">مبلغ نهایی</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invoice.items.map((it) => (
+                          <tr key={it.id} className="border-b border-border/60 last:border-0">
+                            <td className="py-2 px-2 text-right">{it.title || '—'}</td>
+                            <td className="py-2 px-2 text-center tabular-nums">{toFaDigits(it.quantity)}</td>
+                            <td className="py-2 px-2 text-left tabular-nums">{formatMoney(it.unitPrice, invoice.currency)}</td>
+                            <td className="py-2 px-2 text-left tabular-nums text-muted-foreground">
+                              {it.discount ? formatMoney(it.discount, invoice.currency) : '—'}
+                            </td>
+                            <td className="py-2 px-2 text-center tabular-nums">{toFaDigits(it.taxRate)}٪</td>
+                            <td className="py-2 px-2 text-left font-bold tabular-nums">
+                              {formatMoney(itemNet(it) + itemTax(it), invoice.currency)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-border bg-muted/40">
+                          <td className="py-2.5 px-2 text-left font-semibold text-muted-foreground" colSpan={5}>
+                            مبلغ قابل پرداخت سند
+                          </td>
+                          <td className="py-2.5 px-2 text-left font-extrabold tabular-nums">
+                            {formatMoney(invoice.total, invoice.currency)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <EmptyState icon={<ScanText size={26} />} title="ردیفی خوانده نشد"
+                    desc="اگر تصویر تار است، سند را دوباره و با کیفیت بالاتر اسکن کنید." />
+                )}
+              </Card>
+
+              <Card>
+                <CardTitle title="متن خام خوانده‌شده"
+                  sub="همان چیزی که موتور از تصویر دیده است؛ برای مقایسه و بازبینی"
+                  icon={<FileText size={18} />}
+                  action={(
+                    <button onClick={() => setShowRaw((v) => !v)}
+                      className="text-[11px] font-semibold text-primary hover:underline">
+                      {showRaw ? 'پنهان کردن' : 'نمایش متن'}
+                    </button>
+                  )} />
+                {showRaw ? (
+                  invoice.rawText ? (
+                    <pre dir="auto" className="whitespace-pre-wrap text-xs leading-7 bg-muted rounded-xl p-4 max-h-[420px] overflow-y-auto font-sans">
+                      {invoice.rawText}
+                    </pre>
+                  ) : (
+                    <EmptyState icon={<ScanText size={26} />} title="متن OCR موجود نیست"
+                      desc="فاکتورهای اسکن‌شده متن خام شناسایی‌شده را اینجا نگه می‌دارند." />
+                  )
+                ) : (
+                  <p className="text-xs text-muted-foreground leading-6">
+                    متن خام برای بازبینی در دسترس است؛ برای جدول خوانا از بخش «اقلام فاکتور» استفاده کنید.
+                  </p>
+                )}
+              </Card>
+            </div>
           )}
         </div>
 

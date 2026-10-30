@@ -50,26 +50,36 @@ function invoicesSheet(invoices: Invoice[]): XLSX.WorkSheet {
   return ws;
 }
 
-/** شیت اقلام تفکیکی */
+/** شیت اقلام تفکیکی — همه اقلام خوانده‌شده با همه ستون‌های مالی */
 function itemsSheet(invoices: Invoice[]): XLSX.WorkSheet {
   const rows = invoices.flatMap((inv) =>
-    inv.items.map((it, i) => ({
-      'شماره فاکتور': inv.number,
-      'تاریخ': toJalali(inv.date),
-      'فروشنده': inv.issuerName,
-      'ردیف': i + 1,
-      'شرح کالا / خدمت': it.title,
-      'تعداد': it.quantity,
-      'قیمت واحد': it.unitPrice,
-      'تخفیف ردیف': it.discount,
-      'درصد مالیات': it.taxRate,
-      'مبلغ خالص': it.quantity * it.unitPrice - it.discount,
-      'مالیات ردیف': Math.round((it.quantity * it.unitPrice - it.discount) * (it.taxRate / 100)),
-      'مبلغ نهایی ردیف': Math.round((it.quantity * it.unitPrice - it.discount) * (1 + it.taxRate / 100)),
-    })),
+    inv.items.map((it, i) => {
+      const net = it.quantity * it.unitPrice - it.discount;
+      const tax = Math.round(net * (it.taxRate / 100));
+      return {
+        'شماره فاکتور': inv.number,
+        'تاریخ فاکتور': toJalali(inv.date),
+        'فروشنده': inv.issuerName,
+        'خریدار': inv.buyerName,
+        'ردیف': i + 1,
+        'شرح کالا / خدمت': it.title,
+        'تعداد': it.quantity,
+        'قیمت واحد': it.unitPrice,
+        'مبلغ ردیف (قبل از تخفیف)': it.quantity * it.unitPrice,
+        'تخفیف ردیف': it.discount,
+        'مبلغ خالص': net,
+        'درصد مالیات': it.taxRate,
+        'مالیات ردیف': tax,
+        'مبلغ نهایی ردیف': net + tax,
+        'واحد پول': inv.currency === 'IRR' ? 'ریال' : 'تومان',
+      };
+    }),
   );
-  const ws = rtlSheet(XLSX.utils.json_to_sheet(rows));
-  setWidths(ws, [16, 14, 26, 8, 34, 10, 14, 12, 12, 16, 14, 16]);
+  const header = ['شماره فاکتور', 'تاریخ فاکتور', 'فروشنده', 'خریدار', 'ردیف',
+    'شرح کالا / خدمت', 'تعداد', 'قیمت واحد', 'مبلغ ردیف (قبل از تخفیف)', 'تخفیف ردیف',
+    'مبلغ خالص', 'درصد مالیات', 'مالیات ردیف', 'مبلغ نهایی ردیف', 'واحد پول'];
+  const ws = rtlSheet(XLSX.utils.json_to_sheet(rows, { header }));
+  setWidths(ws, [16, 14, 26, 24, 7, 38, 10, 15, 20, 13, 15, 11, 14, 18, 10]);
   return ws;
 }
 

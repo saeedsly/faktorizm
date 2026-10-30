@@ -17,6 +17,7 @@ import time
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from table import extract_items
 from textfix import postprocess_line
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -151,7 +152,7 @@ def _to_item(box, text, score):
     ys = [p[1] for p in box]
     xs = [p[0] for p in box]
     return {
-        'text': str(text),
+        'text': postprocess_line(str(text)),
         'score': float(score),
         'box': [[float(x), float(y)] for x, y in box],
         'ymin': min(ys), 'ymax': max(ys),
@@ -220,7 +221,7 @@ def reread_items(img, items, pad_x=0.06, pad_y=0.22):
         if new_digits < old_digits and len(old_text.strip()) >= 4 and old_score >= 0.5:
             take = False
         if take and new_text.strip():
-            item['text'] = new_text
+            item['text'] = postprocess_line(new_text)
             item['score'] = new_score
             improved += 1
     return items, improved
@@ -302,7 +303,7 @@ def reconstruct_rows(items):
         chunk_texts = []
         for chunk in chunks:
             ordered = sorted(chunk, key=lambda i: -i['xmin'])
-            texts = [postprocess_line(i['text']) for i in ordered]
+            texts = [i['text'] for i in ordered]
             texts = [t for t in texts if t]
             if texts:
                 chunk_texts.append(' '.join(texts))
@@ -380,6 +381,9 @@ def recognize_bytes(image_bytes, use_variants=True):
 
     lines = best['lines']
     text = '\n'.join(line['text'] for line in lines)
+
+    # فهم ساختار جدول از موقعیت خانه‌ها (مستقل از قالب هر فاکتور)
+    structured_items, totals = extract_items(best['items'])
     total_chars = max(sum(len(line['text']) for line in lines), 1)
     confidence = round(
         sum(line['confidence'] * max(len(line['text']), 1) for line in lines) / total_chars * 100, 1)
@@ -391,4 +395,6 @@ def recognize_bytes(image_bytes, use_variants=True):
         'variant': best['name'],
         'skew': angle,
         'variants': trace,
+        'items': structured_items,
+        'totals': totals,
     }

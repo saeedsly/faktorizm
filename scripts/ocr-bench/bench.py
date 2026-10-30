@@ -103,7 +103,7 @@ def run(image_path):
 
 def main():
     truth = json.load(open(os.path.join(HERE, 'invoice-truth.json'), encoding='utf-8'))
-    names = sys.argv[1:] or ['invoice-clean.png', 'invoice-photo.jpg', 'invoice-lowres.jpg']
+    names = sys.argv[1:] or ['invoice-clean.png', 'invoice-alt.png', 'invoice-photo.jpg', 'invoice-lowres.jpg']
     print(f'{"تصویر":<20}{"CER":>8}{"اطمینان":>10}{"زمان":>10}  وضعیت فیلدها')
     print('-' * 100)
     all_cer = []

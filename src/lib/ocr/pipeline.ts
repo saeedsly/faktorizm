@@ -1,5 +1,6 @@
 import { recognizeBest } from './engine';
 import { recognizeViaServer } from './serverEngine';
+import type { ServerItem, ServerTotals } from './serverEngine';
 import {
   loadBitmap, bitmapToCanvas, makeThumbnail, enhanceCanvas, upscaleIfSmall,
   grayscaleEnhance, deskewCanvas, canvasToBlob,
@@ -9,6 +10,7 @@ import { parseInvoiceText } from './parser';
 import { invoiceFromParsed } from '../invoices';
 import { getSettings } from '../db';
 import { recognizeWithAi, AI_PROVIDERS } from './aiEngine';
+import { applyStructuredItems } from './structured';
 import { mergeAiIntoParsed } from './merge';
 import type { AiOcrResult } from './aiEngine';
 import type { AppSettings, Invoice } from '../types';
@@ -98,6 +100,8 @@ export async function processFile(
   let aiResult: AiOcrResult | undefined;
   let preview = '';
   let enhancedForAi: Blob | null = null;
+  const structuredItems: ServerItem[] = [];
+  let structuredTotals: ServerTotals | undefined;
 
   for (let i = 0; i < canvases.length; i++) {
     onStage(`بهبود کیفیت و تصحیح کجی صفحه ${i + 1}`, 0.18 + (i / canvases.length) * 0.14);
@@ -134,6 +138,8 @@ export async function processFile(
       serverEngineUsed = true;
       pageText = serverResult.text;
       pageConfidence = serverResult.confidence;
+      if (serverResult.items?.length) structuredItems.push(...serverResult.items);
+      if (serverResult.totals) structuredTotals = { ...structuredTotals, ...serverResult.totals };
     } else {
       const local = await recognizeBest(prepared, settings, (_s, p) =>
         onStage(`خواندن متن صفحه ${i + 1}`, 0.34 + ((i + p) / canvases.length) * 0.5),
@@ -155,6 +161,11 @@ export async function processFile(
   let confidence = Math.round(confSum / canvases.length);
   const fullSettings = settings ?? (await getSettings());
   let parsed = parseInvoiceText(rawText, confidence, fullSettings.defaultTaxRate);
+
+  // اقلام از فهم ساختار جدول: جای درست هر ستون، نه حدس از ترتیب متن
+  if (structuredItems.length) {
+    parsed = applyStructuredItems(parsed, structuredItems, structuredTotals);
+  }
 
   let source: OcrSource = 'local';
   if (serverEngineUsed) {

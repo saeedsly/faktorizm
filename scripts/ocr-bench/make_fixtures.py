@@ -113,6 +113,64 @@ def draw_invoice():
     return img
 
 
+
+
+def draw_alt_invoice():
+    """قالب دوم یک شرکت متفاوت: تخفیف و مالیات ستون‌دار و ارقام لاتین."""
+    img = Image.new('RGB', (W, H), '#ffffff')
+    d = ImageDraw.Draw(img)
+    f_title = ImageFont.truetype(FONT_PATH, 38)
+    f_head = ImageFont.truetype(FONT_PATH, 24)
+    f_body = ImageFont.truetype(FONT_PATH, 23)
+    f_small = ImageFont.truetype(FONT_PATH, 20)
+
+    d.rectangle([0, 0, W, 10], fill='#0f766e')
+    d.text((W - 50, 50), fa('شرکت خدمات فنی پارس‌رایان'), font=f_title, fill='#0f172a', anchor='ra')
+    d.text((W - 50, 100), fa('شناسه ملی: 14009988776 — تلفن: 02144556677'), font=f_small, fill='#475569', anchor='ra')
+    d.text((W - 50, 145), fa('صورتحساب خدمات'), font=f_head, fill='#0f766e', anchor='ra')
+    d.text((50, 150), 'No: SR-2401-118', font=f_body, fill='#0f172a')
+    d.text((50, 190), 'Date: 2025/06/02', font=f_body, fill='#0f172a')
+    d.text((W - 50, 195), fa('خریدار: مجتمع صنعتی البرز'), font=f_body, fill='#0f172a', anchor='ra')
+
+    top = 270
+    cols = [  # راست‌ترین: شرح خدمت
+        (800, 1180, 'شرح خدمت'),
+        (720, 800, 'مقدار'),
+        (540, 720, 'نرخ'),
+        (430, 540, 'تخفیف'),
+        (330, 430, 'مالیات'),
+        (60, 330, 'مبلغ نهایی'),
+    ]
+    d.rectangle([50, top, W - 50, top + 50], fill='#e2f5f1')
+    for x0, x1, title in cols:
+        d.text(((x0 + x1) / 2, top + 25), fa(title), font=f_head, fill='#0f766e', anchor='mm')
+
+    rows = [
+        ('پشتیبانی سالانه شبکه', 1, 42000000, 2000000, 9, 43600000),
+        ('نصب و راه‌اندازی سرور', 2, 8500000, 0, 9, 18530000),
+        ('کابل‌کشی شبکه سالن تولید', 40, 320000, 500000, 0, 12300000),
+    ]
+    y = top + 50
+    for name, qty, rate, disc, tax, final in rows:
+        d.text((1170, y + 26), fa(name), font=f_body, fill='#0f172a', anchor='rm')
+        d.text((760, y + 26), to_fa(qty), font=f_body, fill='#0f172a', anchor='mm')
+        d.text((630, y + 26), to_fa(f'{rate:,}'), font=f_body, fill='#0f172a', anchor='mm')
+        d.text((485, y + 26), to_fa(f'{disc:,}'), font=f_body, fill='#0f172a', anchor='mm')
+        d.text((380, y + 26), to_fa(f'{tax}%'), font=f_body, fill='#0f172a', anchor='mm')
+        d.text((195, y + 26), to_fa(f'{final:,}'), font=f_body, fill='#0f172a', anchor='mm')
+        y += 52
+
+    y += 30
+    d.text((330, y), to_fa(f'{sum(r[5] for r in rows):,}'), font=f_head, fill='#0f172a', anchor='rm')
+    d.text((420, y), fa('مبلغ قابل پرداخت'), font=f_body, fill='#334155', anchor='rm')
+    d.text((W - 50, H - 90), fa('این سند بدون مهر رسمی معتبر نیست.'), font=f_small, fill='#64748b', anchor='ra')
+    return img
+
+
+def to_fa(text):
+    return str(text).translate(FA_DIGITS)
+
+
 def degrade(img, blur, noise, angle, scale, quality, path):
     out = img.rotate(angle, resample=Image.BICUBIC, expand=False, fillcolor='white')
     if scale != 1.0:
@@ -140,6 +198,9 @@ def main():
                     path=os.path.join(HERE, 'invoice-photo.jpg'))
     low = degrade(base, blur=1.5, noise=0.002, angle=-0.8, scale=0.55, quality=50,
                   path=os.path.join(HERE, 'invoice-lowres.jpg'))
+
+    alt = draw_alt_invoice()
+    alt.save(os.path.join(HERE, 'invoice-alt.png'), optimize=True)
 
     truth = dict(INVOICE)
     truth['items'] = [{'name': n, 'qty': q, 'unit': u, 'total': t} for n, q, u, t in INVOICE['items']]

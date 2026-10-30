@@ -7,11 +7,33 @@
  */
 import { getAccessToken } from '../api/client';
 
+/** ردیف کالای ساخت‌یافته از فهم ساختار جدول در سرویس */
+export interface ServerItem {
+  title: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  taxRate: number;
+  taxAmount?: number;
+  total: number;
+}
+
+export interface ServerTotals {
+  subtotal?: number;
+  tax?: number;
+  discount?: number;
+  total?: number;
+}
+
 export interface ServerOcrResult {
   text: string;
   confidence: number;
   lines: Array<{ text: string; confidence: number }>;
   elapsedMs?: number;
+  /** اقلام جدول که بر پایه موقعیت ستون‌ها استخراج شده‌اند */
+  items?: ServerItem[];
+  totals?: ServerTotals;
+  variant?: string;
 }
 
 let availability: 'unknown' | 'up' | 'down' = 'unknown';
@@ -78,11 +100,28 @@ export async function recognizeViaServer(canvas: HTMLCanvasElement): Promise<Ser
     const json = await res.json();
     if (!res.ok || !json.success || !json.data) return null;
     const data = json.data;
+    const items: ServerItem[] = Array.isArray(data.items)
+      ? data.items
+        .filter((it: unknown) => !!it && typeof it === 'object')
+        .map((it: Record<string, unknown>) => ({
+          title: String(it.title ?? ''),
+          quantity: Number(it.quantity ?? 1) || 1,
+          unitPrice: Number(it.unitPrice ?? 0) || 0,
+          discount: Number(it.discount ?? 0) || 0,
+          taxRate: Number(it.taxRate ?? 0) || 0,
+          taxAmount: Number(it.taxAmount ?? 0) || 0,
+          total: Number(it.total ?? 0) || 0,
+        }))
+        .filter((it: ServerItem) => it.title.length > 0)
+      : [];
     return {
       text: String(data.text ?? ''),
       confidence: Number(data.confidence ?? 0),
       lines: Array.isArray(data.lines) ? data.lines : [],
       elapsedMs: data.elapsedMs,
+      items,
+      totals: data.totals && typeof data.totals === 'object' ? data.totals : undefined,
+      variant: typeof data.variant === 'string' ? data.variant : undefined,
     };
   } catch {
     // خطای شبکه/مهلت: این سند با موتور داخلی خوانده می‌شود
