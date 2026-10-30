@@ -72,6 +72,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ocrEngine: 'local',
   aiProvider: 'gemini',
   aiApiKey: '',
+  aiKeys: '',
+  aiBaseUrl: '',
   aiModel: '',
   aiAskEachTime: true,
   autoApproveThreshold: 85,

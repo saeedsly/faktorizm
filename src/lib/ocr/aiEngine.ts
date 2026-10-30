@@ -9,11 +9,20 @@
  * مخدوش» و «متن تبلیغ داخل نام کالا» در آن وجود ندارد.
  */
 import type { AiProvider } from '../types';
+import {
+  PROVIDERS, providerInfo, baseUrlOf, keysOf, FREE_FIRST,
+} from './providers';
+import type { ProviderId, ProviderInfo } from './providers';
 
 export interface AiOcrConfig {
   provider: AiProvider;
+  /** کلید اصلی (سازگاری با تنظیمات قدیمی) */
   apiKey: string;
   model?: string;
+  /** چند کلید برای گردش و عبور از سقف مصرف رایگان */
+  keys?: string[];
+  /** آدرس پایه دلخواه: Ollama، پروکسی یا سرویس سازگار با OpenAI */
+  baseUrl?: string;
 }
 
 export interface AiItem {
@@ -63,40 +72,31 @@ export interface AiOcrResult {
   attempts?: number;
 }
 
-export const AI_PROVIDERS: Record<AiProvider, {
+/** نمای سازگار با کدهای قبلی؛ منبع اصلی `providers.ts` است */
+export const AI_PROVIDERS = Object.fromEntries(
+  (Object.keys(PROVIDERS) as ProviderId[]).map((id) => [id, {
+    label: PROVIDERS[id].label,
+    defaultModel: PROVIDERS[id].defaultModel,
+    keyUrl: PROVIDERS[id].keyUrl,
+    hint: PROVIDERS[id].hint,
+    models: PROVIDERS[id].models.map((model) => model.id),
+    free: PROVIDERS[id].free,
+    rateNote: PROVIDERS[id].rateNote,
+    keyless: PROVIDERS[id].keyless ?? false,
+  }]),
+) as Record<ProviderId, {
   label: string;
   defaultModel: string;
   keyUrl: string;
   hint: string;
   models: string[];
-}> = {
-  gemini: {
-    label: 'گوگل Gemini',
-    defaultModel: 'gemini-2.5-flash',
-    keyUrl: 'https://aistudio.google.com/apikey',
-    hint: 'سریع و ارزان، فارسی را خوب می‌خواند؛ برای اکثر فاکتورها کافی است.',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-pro-preview'],
-  },
-  openai: {
-    label: 'OpenAI',
-    defaultModel: 'gpt-4.1-mini',
-    keyUrl: 'https://platform.openai.com/api-keys',
-    hint: 'دقت بالا در جدول‌های شلوغ و ارقام؛ کمی کندتر.',
-    models: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini'],
-  },
-  openrouter: {
-    label: 'OpenRouter (چند مدل با یک کلید)',
-    defaultModel: 'google/gemini-2.5-flash',
-    keyUrl: 'https://openrouter.ai/keys',
-    hint: 'با یک کلید به Gemini، Claude و مدل‌های دیگر دسترسی دارید.',
-    models: [
-      'google/gemini-2.5-flash',
-      'google/gemini-2.5-pro',
-      'anthropic/claude-sonnet-4.5',
-      'openai/gpt-4.1-mini',
-    ],
-  },
-};
+  free: ProviderInfo['free'];
+  rateNote: string;
+  keyless: boolean;
+}>;
+
+export { PROVIDERS, FREE_FIRST, baseUrlOf, keysOf, providerInfo };
+export type { ProviderId, ProviderInfo };
 
 /** متن راهنمای مدل: خواندن دقیق فاکتور فارسی و خروجی ساخت‌یافته */
 const SCHEMA_PROMPT = `تو یک موتور استخراج داده از فاکتور و صورتحساب ایرانی هستی. تصویر سند را دقیق بخوان.
@@ -375,7 +375,8 @@ async function postJson(url: string, body: unknown, headers: Record<string, stri
 
 async function callGemini(image: { mime: string; base64: string }, cfg: AiOcrConfig, signal?: AbortSignal): Promise<string> {
   const model = cfg.model?.trim() || AI_PROVIDERS.gemini.defaultModel;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+  const base = baseUrlOf(cfg.provider, cfg.baseUrl);
+  const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const payload = await postJson(url, {
     contents: [{
       role: 'user',
@@ -416,7 +417,10 @@ async function callOpenAiCompatible(
         ],
       },
     ],
-  }, { Authorization: `Bearer ${cfg.apiKey}`, ...(options.extraHeaders ?? {}) }, signal) as {
+  }, {
+    ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
+    ...(options.extraHeaders ?? {}),
+  }, signal) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   const text = payload.choices?.[0]?.message?.content ?? '';
@@ -424,41 +428,124 @@ async function callOpenAiCompatible(
   return text;
 }
 
-async function callProvider(image: { mime: string; base64: string }, cfg: AiOcrConfig, signal?: AbortSignal): Promise<string> {
-  if (cfg.provider === 'gemini') return callGemini(image, cfg, signal);
-  if (cfg.provider === 'openrouter') {
-    return callOpenAiCompatible(image, cfg, {
-      url: 'https://openrouter.ai/api/v1/chat/completions',
-      label: 'OpenRouter',
-      extraHeaders: { 'HTTP-Referer': 'https://faktorizm.ir', 'X-Title': 'Faktorizm' },
-    }, signal);
+/** آدرس نهایی گفت‌وگو برای هر سرویس */
+export function chatEndpoint(cfg: AiOcrConfig): string {
+  const base = baseUrlOf(cfg.provider, cfg.baseUrl);
+  if (providerInfo(cfg.provider).kind === 'gemini') return base;
+  return `${base}/chat/completions`;
+}
+
+/** کلیدهای قابل استفاده؛ مدل محلی کلید لازم ندارد */
+function usableKeys(cfg: AiOcrConfig): string[] {
+  const list = (cfg.keys ?? []).map((key) => key.trim()).filter((key) => key.length >= 8);
+  const fallback = cfg.apiKey?.trim();
+  const all = list.length ? list : fallback ? [fallback] : [];
+  return [...new Set(all)];
+}
+
+/** آیا این خطا با کلید بعدی حل می‌شود؟ */
+function keyRotationWorth(error: unknown): boolean {
+  const text = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  return /کد 429|کد 401|کد 403|سهمیه|کلید|quota|rate limit/.test(text);
+}
+
+/**
+ * فراخوانی سرویس با گردش کلید.
+ * اگر چند کلید ثبت شده باشد و یکی به سقف مصرف یا خطای کلید بخورد،
+ * کلید بعدی امتحان می‌شود؛ بنابراین با چند کلید رایگان می‌شود
+ * ده‌ها سند در روز خواند.
+ */
+/**
+ * گردش کلید: تا وقتی یکی جواب می‌دهد جلو می‌رود؛ اگر خطا مربوط به کلید یا
+ * سهمیه باشد، کلید بعدی را امتحان می‌کند. برای آزمون جدا شده است.
+ */
+export async function withKeyRotation<T>(
+  keys: string[],
+  run: (key: string, index: number) => Promise<T>,
+): Promise<{ value: T; keyIndex: number }> {
+  if (!keys.length) throw new Error('کلید API تنظیم نشده است؛ در تنظیمات وارد کنید.');
+  let lastError: unknown;
+  for (let index = 0; index < keys.length; index++) {
+    try {
+      const value = await run(keys[index], index);
+      return { value, keyIndex: index };
+    } catch (error) {
+      lastError = error;
+      if (!keyRotationWorth(error) || index === keys.length - 1) throw error;
+    }
   }
+  throw lastError ?? new Error('سرویس ابری پاسخ نداد');
+}
+
+async function callWithKeys(
+  image: { mime: string; base64: string },
+  cfg: AiOcrConfig,
+  signal?: AbortSignal,
+): Promise<{ text: string; keyIndex: number }> {
+  const info = providerInfo(cfg.provider);
+  const keys = usableKeys(cfg);
+  if (!keys.length && !info.keyless) {
+    throw new Error('کلید API تنظیم نشده است؛ در تنظیمات وارد کنید.');
+  }
+  const attempts = keys.length ? keys : ['local'];
+  const { value, keyIndex } = await withKeyRotation(attempts, (key) =>
+    callProviderWith({ ...cfg, apiKey: key }, image, signal));
+  return { text: value, keyIndex };
+}
+
+async function callProviderWith(cfg: AiOcrConfig, image: { mime: string; base64: string }, signal?: AbortSignal): Promise<string> {
+  const info = providerInfo(cfg.provider);
+  if (info.kind === 'gemini') return callGemini(image, cfg, signal);
   return callOpenAiCompatible(image, cfg, {
-    url: 'https://api.openai.com/v1/chat/completions',
-    label: 'OpenAI',
+    url: chatEndpoint(cfg),
+    label: info.label,
+    extraHeaders: cfg.provider === 'openrouter'
+      ? { 'HTTP-Referer': 'https://faktorizm.ir', 'X-Title': 'Faktorizm' }
+      : undefined,
   }, signal);
 }
 
 /** آزمون اتصال کلید بدون ارسال فاکتور واقعی */
 export async function testAiConnection(cfg: AiOcrConfig): Promise<{ ok: boolean; error?: string; model?: string }> {
   const model = cfg.model?.trim() || defaultModelOf(cfg.provider);
+  const info = providerInfo(cfg.provider);
+  const key = usableKeys(cfg)[0] ?? '';
+  if (!key && !info.keyless) return { ok: false, error: 'کلید API وارد نشده است' };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
+  const base = baseUrlOf(cfg.provider, cfg.baseUrl);
   try {
-    if (cfg.provider === 'gemini') {
+    if (info.kind === 'gemini') {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`,
-        { headers: { 'x-goog-api-key': cfg.apiKey }, signal: controller.signal },
+        `${base}/v1beta/models/${encodeURIComponent(model)}`,
+        { headers: { 'x-goog-api-key': key }, signal: controller.signal },
       );
       if (!res.ok) return { ok: false, error: httpError('Gemini', res.status, await res.text()).message };
       return { ok: true, model };
     }
-    const url = cfg.provider === 'openrouter' ? 'https://openrouter.ai/api/v1/models' : 'https://api.openai.com/v1/models';
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${cfg.apiKey}` }, signal: controller.signal });
-    if (!res.ok) return { ok: false, error: httpError(AI_PROVIDERS[cfg.provider].label, res.status, await res.text()).message };
+    // سرویس‌های سازگار با OpenAI فهرست مدل دارند؛ مدل محلی ممکن است نداشته باشد،
+    // پس برای Ollama کافی است پورت پاسخ دهد.
+    const res = await fetch(`${base}/models`, {
+      headers: key ? { Authorization: `Bearer ${key}` } : {},
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      if (info.keyless) return { ok: true, model };
+      return { ok: false, error: httpError(info.label, res.status, await res.text()).message };
+    }
+    if (info.keyless) {
+      const payload = await res.json().catch(() => ({})) as { data?: Array<{ id?: string }> };
+      const ids = (payload.data ?? []).map((row) => row.id ?? '');
+      if (ids.length && model && !ids.some((id) => id === model || id.startsWith(`${model}:`) || id.startsWith(model))) {
+        return { ok: true, model, error: `اتصال برقرار است، ولی مدل «${model}» در فهرست نیست. اجرا کنید: ollama pull ${model}` };
+      }
+    }
     return { ok: true, model };
   } catch (err) {
-    return { ok: false, error: safeError(err, cfg.apiKey) };
+    const reason = info.keyless
+      ? 'به مدل محلی وصل نشد؛ مطمئن شوید Ollama اجرا و در حال گوش دادن به پورت است.'
+      : safeError(err, key);
+    return { ok: false, error: reason };
   } finally {
     clearTimeout(timer);
   }
@@ -472,8 +559,12 @@ export async function testAiConnection(cfg: AiOcrConfig): Promise<{ ok: boolean;
 export async function recognizeWithAi(blob: Blob, cfg: AiOcrConfig, timeoutMs = 120000): Promise<AiOcrResult> {
   const started = performance.now();
   const model = cfg.model?.trim() || defaultModelOf(cfg.provider);
-  if (!cfg.apiKey.trim()) {
+  const info = providerInfo(cfg.provider);
+  if (!usableKeys(cfg).length && !info.keyless) {
     return { ok: false, error: 'کلید API تنظیم نشده است؛ در تنظیمات وارد کنید.', elapsedMs: 0 };
+  }
+  if (!model) {
+    return { ok: false, error: 'نام مدل خالی است؛ یک مدل از فهرست تنظیمات انتخاب کنید.', elapsedMs: 0 };
   }
 
   const controller = new AbortController();
@@ -487,7 +578,7 @@ export async function recognizeWithAi(blob: Blob, cfg: AiOcrConfig, timeoutMs = 
     for (let attempt = 0; attempt < 2; attempt++) {
       attempts = attempt + 1;
       try {
-        text = await callProvider(image, cfg, controller.signal);
+        text = (await callWithKeys(image, cfg, controller.signal)).text;
         lastError = undefined;
         break;
       } catch (error) {
@@ -503,7 +594,7 @@ export async function recognizeWithAi(blob: Blob, cfg: AiOcrConfig, timeoutMs = 
       fields = normalizeFields(extractJson(text));
     } catch {
       // یک بار دیگر با تأکید بر JSON خالص می‌پرسیم
-      text = await callProvider(image, cfg, controller.signal);
+      text = (await callWithKeys(image, cfg, controller.signal)).text;
       fields = normalizeFields(extractJson(text));
     }
 

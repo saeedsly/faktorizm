@@ -15,7 +15,7 @@ import { parseInvoiceText } from './parser';
 import type { ParsedInvoice } from './parser';
 import { invoiceFromParsed } from '../invoices';
 import { getSettings } from '../db';
-import { recognizeWithAi, AI_PROVIDERS, mergeAiPages } from './aiEngine';
+import { recognizeWithAi, AI_PROVIDERS, mergeAiPages, keysOf, providerInfo } from './aiEngine';
 import { buildCloudInvoice } from './cloudFirst';
 import { applyStructuredItems } from './structured';
 import { analyzeInvoiceText, applyFreeTextAnalysis } from './freetext';
@@ -180,7 +180,9 @@ export async function processFile(
   }
 
   // تصمیم ارسال به سرویس ابری، یک‌بار برای هر سند و با تأیید صریح کاربر
-  const aiConfigured = settings.ocrEngine !== 'local' && !!settings.aiApiKey?.trim();
+  const aiKeys = keysOf(settings);
+  const aiConfigured = settings.ocrEngine !== 'local'
+    && (aiKeys.length > 0 || providerInfo(settings.aiProvider).keyless);
   let aiAllowed = false;
   if (aiConfigured) {
     if (!settings.aiAskEachTime) {
@@ -189,7 +191,7 @@ export async function processFile(
       aiAllowed = await options.onAiConsent({
         fileName: file.name,
         providerLabel: AI_PROVIDERS[settings.aiProvider]?.label ?? 'سرویس ابری',
-        model: settings.aiModel?.trim() || AI_PROVIDERS[settings.aiProvider]?.defaultModel,
+        model: (settings.aiModel?.trim() || AI_PROVIDERS[settings.aiProvider]?.defaultModel) || undefined,
         mode: settings.ocrEngine === 'ai' ? 'ai' : 'hybrid',
       });
     }
@@ -245,7 +247,9 @@ export async function processFile(
       const blob = await canvasToBlob(canvases[i], 0.95);
       const result = await recognizeWithAi(blob, {
         provider: settings.aiProvider,
-        apiKey: settings.aiApiKey,
+        apiKey: aiKeys[0] ?? '',
+        keys: aiKeys,
+        baseUrl: settings.aiBaseUrl,
         model: settings.aiModel,
       });
       mark(`لایه ابری صفحه ${i + 1}`, tAi);
@@ -267,7 +271,9 @@ export async function processFile(
           const blob = await canvasToBlob(prepared.gray, 0.94);
           return recognizeWithAi(blob, {
             provider: settings.aiProvider,
-            apiKey: settings.aiApiKey,
+            apiKey: aiKeys[0] ?? '',
+            keys: aiKeys,
+            baseUrl: settings.aiBaseUrl,
             model: settings.aiModel,
           });
         })()

@@ -14,6 +14,9 @@ import { logActivity } from '@/lib/activity';
 import { toFaDigits } from '@/lib/utils';
 import { checkServerOcr } from '@/lib/ocr/serverEngine';
 import { AI_PROVIDERS, testAiConnection } from '@/lib/ocr/aiEngine';
+import { PROVIDERS, FREE_BADGE, FREE_FIRST, keysOf } from '@/lib/ocr/providers';
+import type { ProviderId } from '@/lib/ocr/providers';
+import { ExternalLink, KeyRound, CheckCircle2, CloudCog } from 'lucide-react';
 
 /** نشانگر موتور فعال OCR: سرویس محلی PP-OCRv5 یا موتور داخلی مرورگر */
 function EngineBadge() {
@@ -176,49 +179,110 @@ export default function SettingsPage() {
 
             {s.ocrEngine !== 'local' && (
               <div className="space-y-3 rounded-xl border border-border p-3.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold flex items-center gap-1.5"><CloudCog size={15} className="text-primary" /> سرویس ابری</p>
+                  <span className="text-[10px] text-muted-foreground">همه گزینه‌ها با کلید خودتان و ثبت‌نام رایگان</span>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {FREE_FIRST.map((id: ProviderId) => {
+                    const info = PROVIDERS[id];
+                    const badge = FREE_BADGE[info.free];
+                    const active = s.aiProvider === id;
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => set({ aiProvider: id, aiModel: '', aiBaseUrl: info.baseUrl })}
+                        className={`rounded-xl border p-3 text-right transition-all ${
+                          active ? 'border-primary bg-primary/10 ring-2 ring-primary/25' : 'border-border hover:border-primary/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[13px] font-bold">{info.label}</p>
+                          <span className={`chip !text-[10px] ${badge.tone}`}>{badge.label}</span>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-5 text-muted-foreground">{info.hint}</p>
+                        <p className="mt-1 text-[10px] text-muted-foreground/80">{info.rateNote}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <Label>سرویس ابری</Label>
-                    <Select
-                      value={s.aiProvider}
-                      onChange={(e) => set({ aiProvider: e.target.value as typeof s.aiProvider, aiModel: '' })}
-                    >
-                      {Object.entries(AI_PROVIDERS).map(([id, meta]) => (
-                        <option key={id} value={id}>{meta.label}</option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>مدل (خالی = پیش‌فرض)</Label>
+                    <Label>مدل</Label>
                     <Input
                       dir="ltr"
                       list="ai-model-list"
                       value={s.aiModel}
-                      placeholder={AI_PROVIDERS[s.aiProvider].defaultModel}
+                      placeholder={PROVIDERS[s.aiProvider].defaultModel || 'نام مدل'}
                       onChange={(e) => set({ aiModel: e.target.value })}
                     />
                     <datalist id="ai-model-list">
-                      {AI_PROVIDERS[s.aiProvider].models.map((model) => <option key={model} value={model} />)}
+                      {PROVIDERS[s.aiProvider].models.map((model) => (
+                        <option key={model.id} value={model.id}>{model.label}</option>
+                      ))}
                     </datalist>
+                    {PROVIDERS[s.aiProvider].models.some((model) => model.best) && (
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        پیشنهاد: <span dir="ltr">{PROVIDERS[s.aiProvider].models.find((model) => model.best)!.id}</span>
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>آدرس پایه (Base URL)</Label>
+                    <Input
+                      dir="ltr"
+                      value={s.aiBaseUrl}
+                      placeholder={PROVIDERS[s.aiProvider].baseUrl || 'https://…/v1'}
+                      onChange={(e) => set({ aiBaseUrl: e.target.value.trim() })}
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      برای Ollama یا سرویس خودتان؛ خالی بگذارید تا آدرس رسمی استفاده شود.
+                    </p>
                   </div>
                 </div>
-                <div>
-                  <Label>کلید API</Label>
-                  <Input
-                    dir="ltr"
-                    type="password"
-                    autoComplete="off"
-                    value={s.aiApiKey}
-                    placeholder="کلید خودتان را اینجا وارد کنید"
-                    onChange={(e) => set({ aiApiKey: e.target.value.trim() })}
-                  />
-                  <p className="mt-1.5 text-[11px] leading-6 text-muted-foreground">
-                    کلید فقط روی همین دستگاه ذخیره می‌شود و برای دریافت آن به{' '}
-                    <a href={AI_PROVIDERS[s.aiProvider].keyUrl} target="_blank" rel="noreferrer"
-                      className="text-primary underline">صفحه کلید {AI_PROVIDERS[s.aiProvider].label}</a>{' '}
-                    مراجعه کنید. {AI_PROVIDERS[s.aiProvider].hint}
+
+                {!PROVIDERS[s.aiProvider].keyless && (
+                  <div>
+                    <Label>کلیدهای API (هر خط یک کلید)</Label>
+                    <textarea
+                      dir="ltr"
+                      rows={3}
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={s.aiKeys}
+                      placeholder="key-one…&#10;key-two…"
+                      onChange={(e) => set({ aiKeys: e.target.value })}
+                      className="w-full rounded-xl border border-border bg-card px-3 py-2 text-xs font-mono outline-none focus:border-primary"
+                    />
+                    <p className="mt-1.5 text-[11px] leading-6 text-muted-foreground">
+                      چند کلید بگذارید تا وقتی یکی به سقف مصرف رایگان خورد، بعدی خودکار امتحان شود.
+                      {' '}الان <b>{toFaDigits(keysOf(s).length)}</b> کلید ثبت شده است.
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-xl bg-muted/70 p-3">
+                  <p className="text-[11px] font-bold mb-1.5 flex items-center gap-1.5">
+                    <KeyRound size={12} className="text-primary" />
+                    گرفتن کلید رایگان از {PROVIDERS[s.aiProvider].label}
                   </p>
+                  <ol className="text-[11px] leading-6 text-muted-foreground list-decimal pr-4 space-y-0.5">
+                    {PROVIDERS[s.aiProvider].keySteps.map((step) => <li key={step}>{step}</li>)}
+                  </ol>
+                  {PROVIDERS[s.aiProvider].keyUrl && (
+                    <a
+                      href={PROVIDERS[s.aiProvider].keyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                    >
+                      <ExternalLink size={11} /> باز کردن صفحه ساخت کلید
+                    </a>
+                  )}
                 </div>
+
                 <div className="flex items-center justify-between rounded-xl bg-muted p-3">
                   <div>
                     <p className="text-sm font-semibold">هر بار بپرس</p>
@@ -226,31 +290,32 @@ export default function SettingsPage() {
                   </div>
                   <Switch checked={s.aiAskEachTime} onChange={(v) => set({ aiAskEachTime: v })} />
                 </div>
+
                 <Button
                   variant="outline"
                   onClick={async () => {
-                    if (!s.aiApiKey.trim()) {
-                      toast.error('اول کلید API را وارد کنید');
-                      return;
-                    }
                     setAiState('checking');
                     const res = await testAiConnection({
                       provider: s.aiProvider,
-                      apiKey: s.aiApiKey,
+                      apiKey: keysOf(s)[0] ?? '',
+                      keys: keysOf(s),
+                      baseUrl: s.aiBaseUrl,
                       model: s.aiModel,
                     });
                     setAiState(res.ok ? 'ok' : 'fail');
-                    if (res.ok) toast.success(`اتصال به ${AI_PROVIDERS[s.aiProvider].label} برقرار است`);
+                    if (res.ok) toast.success(`اتصال به ${PROVIDERS[s.aiProvider].label} برقرار است`);
                     else toast.error(`اتصال برقرار نشد: ${res.error ?? 'خطای نامشخص'}`);
                   }}
                 >
-                  {aiState === 'checking' ? 'در حال بررسی…' : 'آزمون اتصال کلید'}
+                  {aiState === 'checking' ? 'در حال بررسی…' : 'آزمون اتصال'}
                 </Button>
                 {aiState === 'ok' && (
-                  <p className="text-[11px] font-semibold text-emerald-500">اتصال کلید تایید شد.</p>
+                  <p className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
+                    <CheckCircle2 size={12} /> اتصال تایید شد.
+                  </p>
                 )}
                 {aiState === 'fail' && (
-                  <p className="text-[11px] font-semibold text-red-500">اتصال برقرار نشد؛ کلید یا مدل را بررسی کنید.</p>
+                  <p className="text-[11px] font-semibold text-red-500">اتصال برقرار نشد؛ کلید، مدل یا آدرس پایه را بررسی کنید.</p>
                 )}
               </div>
             )}

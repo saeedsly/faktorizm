@@ -2,7 +2,11 @@
 // بدون تماس شبکه؛ پاسخ مدل شبیه‌سازی می‌شود.
 import {
   normalizeFields, toAmount, extractJson, mergeAiPages, AI_PROVIDERS, modelsOf, defaultModelOf,
+  chatEndpoint, withKeyRotation,
 } from '../src/lib/ocr/aiEngine';
+import {
+  PROVIDERS, providerInfo, keysOf, baseUrlOf, FREE_FIRST, FREE_BADGE,
+} from '../src/lib/ocr/providers';
 import { buildCloudInvoice, buildAiTranscript, itemsFromAi } from '../src/lib/ocr/cloudFirst';
 import { mergeAiIntoParsed } from '../src/lib/ocr/merge';
 import { parseInvoiceText } from '../src/lib/ocr/parser';
@@ -23,6 +27,42 @@ function check(name: string, condition: boolean, extra = '') {
 // ۰) پیکربندی سرویس‌ها
 check('سرویس OpenRouter با مدل پیش‌فرض تعریف شده', !!AI_PROVIDERS.openrouter && defaultModelOf('openrouter').length > 3);
 check('برای هر سرویس چند مدل پیشنهادی داریم', modelsOf('gemini').length >= 2 && modelsOf('openrouter').length >= 3);
+
+/* ---------------------------------------------- سرویس‌های رایگان و کلیدها */
+check('سرویس‌های رایگان اول فهرست می‌آیند',
+  FREE_FIRST[0] === 'gemini' && FREE_FIRST.indexOf('openai') > FREE_FIRST.indexOf('ollama'));
+check('سرویس‌های رایگان نشان درست دارند',
+  FREE_BADGE[providerInfo('gemini').free].label === 'سقف رایگان'
+  && FREE_BADGE[providerInfo('openrouter').free].label === 'رایگان'
+  && FREE_BADGE[providerInfo('ollama').free].label === 'آفلاین و بی‌نهایت');
+check('GitHub Models و Groq و Mistral هم معرفی شده‌اند',
+  ['github', 'groq', 'mistral'].every((id) => PROVIDERS[id as 'github'].baseUrl.startsWith('https://')));
+check('مدل محلی کلید لازم ندارد', PROVIDERS.ollama.keyless === true);
+check('برای هر سرویس رایگان راهنمای ساخت کلید داریم',
+  ['gemini', 'openrouter', 'github', 'groq', 'mistral'].every((id) => PROVIDERS[id as 'gemini'].keySteps.length >= 2));
+check('سقف مصرف هر سرویس به کاربر گفته می‌شود',
+  Object.values(PROVIDERS).every((info) => info.rateNote.length > 5));
+
+check('چند کلید از متن چندخطی خوانده می‌شود',
+  keysOf({ aiKeys: 'abc1234567\ndef7654321', aiApiKey: '' }).length === 2);
+check('کلید تکراری یک بار شمرده می‌شود',
+  keysOf({ aiKeys: 'abc1234567\nabc1234567', aiApiKey: '' }).length === 1);
+check('کلید کوتاه و نامعتبر نادیده گرفته می‌شود',
+  keysOf({ aiKeys: 'abc\n\n   ', aiApiKey: '' }).length === 0);
+check('کلید قدیمی تک‌گانه هم پذیرفته می‌شود',
+  keysOf({ aiApiKey: 'legacy_key_12345' }).length === 1);
+
+check('آدرس پایه رسمی هر سرویس درست است',
+  baseUrlOf('github') === 'https://models.github.ai/inference'
+  && baseUrlOf('groq') === 'https://api.groq.com/openai/v1'
+  && baseUrlOf('ollama') === 'http://localhost:11434/v1');
+check('آدرس دلخواه کاربر بر آدرس رسمی مقدم است',
+  baseUrlOf('gemini', 'http://192.168.1.9:8080/v1/') === 'http://192.168.1.9:8080/v1');
+check('نقطه پایانی گفت‌وگو برای Gemini فرق دارد',
+  chatEndpoint({ provider: 'gemini', apiKey: 'k' }) === 'https://generativelanguage.googleapis.com'
+  && chatEndpoint({ provider: 'openrouter', apiKey: 'k' }) === 'https://openrouter.ai/api/v1/chat/completions');
+check('سرویس دلخواه از آدرس کاربر استفاده می‌کند',
+  chatEndpoint({ provider: 'custom', apiKey: 'k', baseUrl: 'https://my.proxy/v1' }) === 'https://my.proxy/v1/chat/completions');
 
 // ۱) تبدیل اعداد فارسی و جداکننده‌ها
 check('عدد فارسی با جداکننده', toAmount('۱۲٬۹۶۶٬۰۰۰') === 12966000);
@@ -163,6 +203,39 @@ const derived = itemsFromAi({ items: [{ name: 'پنیر', qty: 4, unitPrice: 0, 
 check('قیمت واحد از مبلغ کل تقسیم می‌شود', derived[0].unitPrice === 100000);
 check('متن بازسازی‌شده بدون قلم کوتاه می‌ماند',
   buildAiTranscript({ items: [] }, []) === '');
+
+// ۱۰) گردش کلید وقتی یکی به سقف مصرف می‌خورد
+const rotationLog: string[] = [];
+const rotated = await withKeyRotation(['aaa11111', 'bbb22222', 'ccc33333'], async (key) => {
+  rotationLog.push(key);
+  if (key === 'aaa11111') throw new Error('سرویس ابری: سهمیه یا محدودیت درخواست (کد 429).');
+  return `ok:${key}`;
+});
+check('کلید دوم وقتی اولی به سقف خورده استفاده می‌شود',
+  rotated.value === 'ok:bbb22222' && rotated.keyIndex === 1, JSON.stringify(rotated));
+check('پس از موفقیت، کلیدهای بعدی امتحان نمی‌شوند', rotationLog.length === 2, rotationLog.join(','));
+
+let stopped = '';
+try {
+  await withKeyRotation(['aaa11111', 'bbb22222'], async () => {
+    throw new Error('کلید API پذیرفته نشد (کد 401)');
+  });
+} catch (error) {
+  stopped = (error as Error).message;
+}
+check('وقتی همه کلیدها رد شوند، خطای آخر برگردانده می‌شود', stopped.includes('401'));
+
+let fatal = '';
+try {
+  await withKeyRotation(['aaa11111', 'bbb22222'], async () => {
+    throw new Error('پاسخ مدل JSON نبود');
+  });
+} catch (error) {
+  fatal = (error as Error).message;
+}
+check('خطای غیرمرتبط با کلید، کلیدها را نمی‌چرخاند', fatal.includes('JSON'));
+check('بدون هیچ کلید، خطای روشن داده می‌شود', await withKeyRotation([], async () => 'x')
+  .then(() => false).catch(() => true));
 
 console.log(`\n${passed}/${passed + failed} بررسی موفق`);
 if (failed > 0) process.exit(1);

@@ -17,7 +17,11 @@ export async function exportBackup(): Promise<void> {
     app: 'faktorizm',
     version: 1,
     exportedAt: new Date().toISOString(),
-    data: { invoices, contacts, products, apiKeys, webhooks, activities, settings },
+    // کلیدهای سرویس ابری داخل پشتیبان نمی‌روند؛ فایل پشتیبان ممکن است جابه‌جا شود
+    data: {
+      invoices, contacts, products, apiKeys, webhooks, activities,
+      settings: settings.map((row) => ({ ...row, aiKeys: '', aiApiKey: '' })),
+    },
   };
   downloadText(JSON.stringify(payload, null, 2), `faktorizm-backup-${toJalali(new Date().toISOString(), 'yyyyMMdd')}.json`);
   logActivity('تهیه نسخه پشتیبان', 'system', `خروجی پشتیبان شامل ${invoices.length} فاکتور`);
@@ -36,7 +40,15 @@ export async function importBackup(file: File): Promise<{ invoices: number; cont
   if (Array.isArray(d.apiKeys)) await db.apiKeys.bulkPut(d.apiKeys);
   if (Array.isArray(d.webhooks)) await db.webhooks.bulkPut(d.webhooks);
   if (Array.isArray(d.activities)) await db.activities.bulkPut(d.activities);
-  if (Array.isArray(d.settings)) await db.settings.bulkPut(d.settings);
+  if (Array.isArray(d.settings)) {
+    // پشتیبان کلید ندارد؛ کلیدهای فعلی همین دستگاه حفظ می‌شوند
+    const current = await db.settings.get('singleton');
+    await db.settings.bulkPut(d.settings.map((row: Record<string, unknown>) => ({
+      ...row,
+      aiKeys: (row.aiKeys as string) || current?.aiKeys || '',
+      aiApiKey: (row.aiApiKey as string) || current?.aiApiKey || '',
+    })) as never);
+  }
   await logActivity('بازیابی نسخه پشتیبان', 'system',
     `بازیابی ${d.invoices?.length ?? 0} فاکتور و ${d.contacts?.length ?? 0} طرف حساب`);
   return {

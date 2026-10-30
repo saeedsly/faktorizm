@@ -206,7 +206,8 @@ export interface Activity {
 }
 
 /** ارائه‌دهنده سرویس ابری خوانش فاکتور (کلید متعلق به خود کاربر) */
-export type AiProvider = 'gemini' | 'openai' | 'openrouter';
+export type AiProvider =
+  | 'gemini' | 'openai' | 'openrouter' | 'github' | 'groq' | 'mistral' | 'ollama' | 'custom';
 
 /** حالت موتور خوانش: محلی آفلاین، ابری، یا ترکیبی (حداکثر دقت) */
 export type OcrEngineMode = 'local' | 'ai' | 'hybrid';
@@ -228,6 +229,10 @@ export interface AppSettings {
   ocrEngine: OcrEngineMode;
   aiProvider: AiProvider;
   aiApiKey: string;
+  /** چند کلید، هر خط یکی؛ برای عبور از سقف مصرف رایگان */
+  aiKeys: string;
+  /** آدرس پایه دلخواه (Ollama، پروکسی یا سرویس سازگار با OpenAI) */
+  aiBaseUrl: string;
   aiModel: string;
   /** پیش از هر ارسال به سرویس ابری از کاربر تأیید گرفته شود */
   aiAskEachTime: boolean;
