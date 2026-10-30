@@ -27,14 +27,16 @@ export function mergeAiIntoParsed(local: ParsedInvoice, ai: AiFields, options: M
   const fc = { ...local.fieldConfidence };
   const aiScore = Math.min(100, Math.max(40, options.aiConfidence ?? ai.confidence ?? 92));
 
-  const items: InvoiceItem[] = ai.items.map((item) => ({
-    id: uid('itm_'),
-    title: item.name,
-    quantity: item.qty || 1,
-    unitPrice: item.unitPrice || 0,
-    discount: 0,
-    taxRate: 0,
-  }));
+  const items: InvoiceItem[] = ai.items
+    .filter((item) => item.name?.trim() && (item.unitPrice || item.total))
+    .map((item) => ({
+      id: uid('itm_'),
+      title: item.name.replace(/\s+/g, ' ').trim(),
+      quantity: item.qty > 0 ? item.qty : 1,
+      unitPrice: item.unitPrice || 0,
+      discount: item.discount && item.discount > 0 ? Math.round(item.discount) : 0,
+      taxRate: item.taxRate && item.taxRate > 0 && item.taxRate <= 100 ? item.taxRate : 0,
+    }));
 
   const itemsTotal = sumItems(items);
   const discountTotal = ai.discount ?? local.discountTotal ?? 0;

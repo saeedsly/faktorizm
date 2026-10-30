@@ -10,6 +10,10 @@ export interface ConsentRequest {
   fileName: string;
   providerLabel: string;
   filesCount: number;
+  /** نام مدل انتخاب‌شده؛ برای شفافیت در تأیید ارسال */
+  model?: string;
+  /** حالت خوانش: «فقط ابری» یا «ترکیبی» */
+  mode?: 'ai' | 'hybrid';
   resolve: Resolver;
 }
 
@@ -27,7 +31,13 @@ export function subscribeConsent(listener: (req: ConsentRequest | null) => void)
 }
 
 /** درخواست تأیید؛ تا پاسخ کاربر معلق می‌ماند */
-export function requestAiConsent(options: { fileName: string; providerLabel: string; filesCount?: number }): Promise<boolean> {
+export function requestAiConsent(options: {
+  fileName: string;
+  providerLabel: string;
+  filesCount?: number;
+  model?: string;
+  mode?: 'ai' | 'hybrid';
+}): Promise<boolean> {
   if (pending) {
     // اگر پرسشی باز است، همان پاسخ برای بقیه صف استفاده می‌شود
     return Promise.resolve(false);
@@ -37,6 +47,8 @@ export function requestAiConsent(options: { fileName: string; providerLabel: str
       fileName: options.fileName,
       providerLabel: options.providerLabel,
       filesCount: options.filesCount ?? 1,
+      model: options.model,
+      mode: options.mode,
       resolve: (approved) => {
         pending = null;
         emit();

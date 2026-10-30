@@ -4,19 +4,23 @@ import { toast } from 'sonner';
 import {
   UploadCloud, Camera, FileText, Image as ImageIcon, ShieldCheck, Zap, FileCheck2,
   ScanLine, Layers, Wrench, Sparkles, Keyboard, FileSpreadsheet, Info, HardDriveDownload,
+  CloudUpload, Cpu, Settings2, AlertTriangle,
 } from 'lucide-react';
+import { useAppStore } from '@/lib/store';
+import { AI_PROVIDERS, modelsOf } from '@/lib/ocr/aiEngine';
 import PageHeader from '@/components/PageHeader';
 import CameraCapture from '@/components/CameraCapture';
 import { Button, Card, CardTitle, EmptyState, Tabs, Badge, Select, Input, Label } from '@/components/ui/primitives';
 import { useOcrQueue } from '@/hooks/useOcrQueue';
 import { StagedList, QueuePanel, CacheCard, inspectImage, type StagedFile } from '@/components/ocr/OcrPanels';
 import { cacheStats, clearAllCaches, usageSummary } from '@/lib/ocr/cache';
-import { uid, formatNumber, toFaDigits } from '@/lib/utils';
+import { uid, formatNumber, toFaDigits, cn as cn2 } from '@/lib/utils';
 import { db } from '@/lib/db';
 import { exportBackup, validateBackup } from '@/lib/exporters/documents';
 
 export default function Scan() {
   const navigate = useNavigate();
+  const { settings, update } = useAppStore();
   const [tab, setTab] = useState('scan');
   const [dragging, setDragging] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -168,6 +172,62 @@ export default function Scan() {
             className="hidden"
             onChange={(e) => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }}
           />
+
+          <Card className="!p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <span className={cn2(settings.ocrEngine === 'local'
+                  ? 'icon-tile h-10 w-10 bg-muted text-muted-foreground'
+                  : 'icon-tile h-10 w-10 bg-primary-soft text-primary')}>
+                  {settings.ocrEngine === 'local' ? <Cpu size={18} /> : <CloudUpload size={18} />}
+                </span>
+                <div>
+                  <p className="text-sm font-bold">
+                    موتور خوانش: {settings.ocrEngine === 'local' ? 'آفلاین و محلی' : settings.ocrEngine === 'ai' ? 'ابرِ هوش مصنوعی (فقط ابری)' : 'ترکیبی (محلی + ابری)'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-5">
+                    {settings.ocrEngine === 'local'
+                      ? 'همه‌چیز روی همین دستگاه پردازش می‌شود؛ ارقام مخدوش و فاکتورهای شلوغ ممکن است دقیق خوانده نشوند.'
+                      : settings.ocrEngine === 'ai'
+                        ? `${AI_PROVIDERS[settings.aiProvider]?.label ?? 'سرویس ابری'} · مدل ${settings.aiModel || AI_PROVIDERS[settings.aiProvider]?.defaultModel} — خوانش مستقیم تصویر بدون OCR محلی.`
+                        : 'خوانش محلی و ابری هم‌زمان اجرا می‌شوند و بهترین مقدار هر فیلد انتخاب می‌شود.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {settings.ocrEngine !== 'ai' && (
+                  <Button size="sm" onClick={() => {
+                    void update({ ocrEngine: 'ai' });
+                    toast.success('حالت ابری فعال شد', {
+                      description: settings.aiApiKey
+                        ? 'اسناد بعدی مستقیم با مدل بینایی خوانده می‌شوند.'
+                        : 'برای شروع، کلید API را در تنظیمات وارد کنید.',
+                    });
+                  }}>
+                    <Sparkles size={15} /> خوانش ابری (دقیق‌تر)
+                  </Button>
+                )}
+                {settings.ocrEngine !== 'local' && (
+                  <Button size="sm" variant="outline" onClick={() => { void update({ ocrEngine: 'local' }); toast.message('حالت آفلاین فعال شد'); }}>
+                    <Cpu size={15} /> فقط محلی
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => navigate('/settings')}>
+                  <Settings2 size={15} /> تنظیمات
+                </Button>
+              </div>
+            </div>
+            {settings.ocrEngine !== 'local' && !settings.aiApiKey && (
+              <div className="mt-3 rounded-xl bg-warning-soft px-3 py-2 text-[11px] leading-5 text-warning flex items-start gap-1.5">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                <span>
+                  کلید API وارد نشده است؛ تا وقتی کلید نگذارید سندها با موتور محلی خوانده می‌شوند.
+                  {' '}
+                  <button onClick={() => navigate('/settings')} className="font-bold underline">وارد کردن کلید در تنظیمات</button>
+                </span>
+              </div>
+            )}
+          </Card>
 
           <div
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}

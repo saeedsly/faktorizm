@@ -155,8 +155,8 @@ export default function SettingsPage() {
               <div className="grid gap-2 sm:grid-cols-3">
                 {([
                   { id: 'local', title: 'آفلاین و محلی', desc: 'بدون اینترنت، داده از دستگاه خارج نمی‌شود' },
-                  { id: 'hybrid', title: 'ترکیبی (پیشنهادی)', desc: 'محلی + ابری و مقایسه نتیجه برای بالاترین دقت' },
-                  { id: 'ai', title: 'فقط ابری', desc: 'سریع‌ترین خوانش ساخت‌یافته؛ نیازمند اینترنت' },
+                  { id: 'hybrid', title: 'ترکیبی', desc: 'محلی + ابری هم‌زمان و انتخاب بهترین مقدار هر فیلد' },
+                  { id: 'ai', title: 'فقط ابری (دقیق‌ترین)', desc: 'تصویر مستقیم به مدل بینایی می‌رود؛ OCR محلی اجرا نمی‌شود' },
                 ] as const).map((mode) => (
                   <button
                     key={mode.id}
@@ -183,18 +183,23 @@ export default function SettingsPage() {
                       value={s.aiProvider}
                       onChange={(e) => set({ aiProvider: e.target.value as typeof s.aiProvider, aiModel: '' })}
                     >
-                      <option value="gemini">گوگل Gemini</option>
-                      <option value="openai">OpenAI</option>
+                      {Object.entries(AI_PROVIDERS).map(([id, meta]) => (
+                        <option key={id} value={id}>{meta.label}</option>
+                      ))}
                     </Select>
                   </div>
                   <div>
                     <Label>مدل (خالی = پیش‌فرض)</Label>
                     <Input
                       dir="ltr"
+                      list="ai-model-list"
                       value={s.aiModel}
                       placeholder={AI_PROVIDERS[s.aiProvider].defaultModel}
                       onChange={(e) => set({ aiModel: e.target.value })}
                     />
+                    <datalist id="ai-model-list">
+                      {AI_PROVIDERS[s.aiProvider].models.map((model) => <option key={model} value={model} />)}
+                    </datalist>
                   </div>
                 </div>
                 <div>
@@ -211,7 +216,7 @@ export default function SettingsPage() {
                     کلید فقط روی همین دستگاه ذخیره می‌شود و برای دریافت آن به{' '}
                     <a href={AI_PROVIDERS[s.aiProvider].keyUrl} target="_blank" rel="noreferrer"
                       className="text-primary underline">صفحه کلید {AI_PROVIDERS[s.aiProvider].label}</a>{' '}
-                    مراجعه کنید.
+                    مراجعه کنید. {AI_PROVIDERS[s.aiProvider].hint}
                   </p>
                 </div>
                 <div className="flex items-center justify-between rounded-xl bg-muted p-3">

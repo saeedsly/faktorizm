@@ -14,6 +14,7 @@ import {
   Layers2, Wallet2, GitBranch, Paperclip, CalendarClock, BadgeCheck, SpellCheck,
   FolderKanban, CopyCheck, ArrowUpDown, SaveAll, ChartLine, UserRoundCheck, BookmarkCheck,
   SquareStack, Timer, ShieldAlert, Share2, FormInput, FileJson,
+  ListChecks, SquareStack as PagesStack,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -199,6 +200,21 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { title: 'داشبورد وضعیت اشتراک', desc: 'روزشمار روزهای باقی‌مانده و تاریخ دقیق انقضا', icon: Crown },
       { title: 'تیکت پشتیبانی با اولویت', desc: 'ثبت درخواست با چهار سطح اولویت و وضعیت پیگیری', icon: LifeBuoy },
       { title: 'گفتگوی رشته‌ای تیکت', desc: 'تبادل پیام بین کاربر و پشتیبانی داخل خود سامانه', icon: MessageSquare },
+    ],
+  },
+  {
+    id: 'cloud',
+    title: 'خوانش ابری هوش مصنوعی',
+    tone: 'bg-info-soft text-info',
+    features: [
+      { title: 'خوانش مستقیم تصویر', desc: 'مدل بینایی خود تصویر را می‌بیند؛ واسطه OCR و خطای ارقام مخدوش حذف می‌شود', icon: CloudUpload },
+      { title: 'حالت فقط ابری', desc: 'OCR محلی اجرا نمی‌شود و سند مستقیم از خروجی ساخت‌یافته مدل ساخته می‌شود', icon: Zap },
+      { title: 'سه سرویس و چند مدل', desc: 'Gemini، OpenAI و OpenRouter با کلید خودتان؛ نام مدل هم قابل تغییر است', icon: Layers2 },
+      { title: 'اقلام کامل از مدل', desc: 'نام، تعداد، قیمت واحد، تخفیف ردیف، نرخ مالیات، کد کالا و واحد شمارش', icon: ListChecks },
+      { title: 'چند صفحه در یک سند', desc: 'صفحه‌های PDF پشت سر هم خوانده و اقلامشان با هم جمع می‌شوند', icon: PagesStack },
+      { title: 'تلاش دوباره هوشمند', desc: 'خطای گذرای شبکه و پاسخ JSON معیوب خودکار یک بار دیگر پرسیده می‌شود', icon: RefreshCcw },
+      { title: 'تأیید ارسال با جزئیات', desc: 'نام فایل، سرویس، مدل و حالت خوانش پیش از هر ارسال نمایش داده می‌شود', icon: ShieldCheck },
+      { title: 'بازگشت امن به محلی', desc: 'اگر سرویس ابری پاسخ ندهد، خوانش محلی جایگزین می‌شود و سند از دست نمی‌رود', icon: Cpu },
     ],
   },
   {

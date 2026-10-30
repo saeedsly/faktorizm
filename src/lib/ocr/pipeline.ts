@@ -15,12 +15,13 @@ import { parseInvoiceText } from './parser';
 import type { ParsedInvoice } from './parser';
 import { invoiceFromParsed } from '../invoices';
 import { getSettings } from '../db';
-import { recognizeWithAi, AI_PROVIDERS } from './aiEngine';
+import { recognizeWithAi, AI_PROVIDERS, mergeAiPages } from './aiEngine';
+import { buildCloudInvoice } from './cloudFirst';
 import { applyStructuredItems } from './structured';
 import { analyzeInvoiceText, applyFreeTextAnalysis } from './freetext';
 import type { FreeMergeInfo, VendorHint } from './freetext';
 import { mergeAiIntoParsed } from './merge';
-import type { AiOcrResult } from './aiEngine';
+import type { AiOcrResult, AiFields } from './aiEngine';
 import type { AppSettings, Invoice } from '../types';
 
 export interface FileMeta {
@@ -67,7 +68,12 @@ export type StageCb = (stage: string, progress: number) => void;
 
 export interface ProcessOptions {
   /** تأیید کاربر برای ارسال تصویر به سرویس ابری؛ نبودش یعنی ارسال مجاز نیست */
-  onAiConsent?: (info: { fileName: string; providerLabel: string }) => Promise<boolean>;
+  onAiConsent?: (info: {
+    fileName: string;
+    providerLabel: string;
+    model?: string;
+    mode?: 'ai' | 'hybrid';
+  }) => Promise<boolean>;
   /** دانش فروشنده برای خوانش دقیق‌تر */
   hint?: VendorHint;
   /** نادیده گرفتن کش خوانش */
@@ -173,12 +179,6 @@ export async function processFile(
     throw new Error('فرمت فایل پشتیبانی نمی‌شود؛ فقط تصویر (JPG/PNG/WEBP) و PDF');
   }
 
-  // اثر انگشت فایل برای کش خوانش
-  const tHash = performance.now();
-  const fileKey = await hashBlob(file);
-  mark('اثر انگشت فایل', tHash);
-  const cached = options.skipCache ? null : await getCachedOcr(fileKey);
-
   // تصمیم ارسال به سرویس ابری، یک‌بار برای هر سند و با تأیید صریح کاربر
   const aiConfigured = settings.ocrEngine !== 'local' && !!settings.aiApiKey?.trim();
   let aiAllowed = false;
@@ -189,9 +189,23 @@ export async function processFile(
       aiAllowed = await options.onAiConsent({
         fileName: file.name,
         providerLabel: AI_PROVIDERS[settings.aiProvider]?.label ?? 'سرویس ابری',
+        model: settings.aiModel?.trim() || AI_PROVIDERS[settings.aiProvider]?.defaultModel,
+        mode: settings.ocrEngine === 'ai' ? 'ai' : 'hybrid',
       });
     }
   }
+
+  // حالت «فقط ابری»: OCR محلی اجرا نمی‌شود و همه چیز از مدل بینایی می‌آید.
+  // کش متن محلی هم استفاده نمی‌شود، چون نتیجه ساخت‌یافته مدل دقیق‌تر است.
+  const cloudOnly = settings.ocrEngine === 'ai' && aiConfigured && aiAllowed;
+
+  // اثر انگشت فایل برای کش خوانش
+  const tHash = performance.now();
+  const fileKey = await hashBlob(file);
+  mark('اثر انگشت فایل', tHash);
+  const cached = options.skipCache || cloudOnly ? null : await getCachedOcr(fileKey);
+
+  const cloudPages: AiFields[] = [];
 
   const textParts: string[] = [];
   let confSum = 0;
@@ -221,6 +235,26 @@ export async function processFile(
     if (i === 0 && cached) {
       textParts.push(cached.text);
       confSum += cached.confidence;
+      continue;
+    }
+
+    if (cloudOnly) {
+      // در حالت ابری، خوانش محلی و پیش‌پردازش سنگین حذف می‌شود
+      onStage(`ارسال صفحه ${i + 1} به موتور ابری`, 0.35 + (i / canvases.length) * 0.45);
+      const tAi = performance.now();
+      const blob = await canvasToBlob(canvases[i], 0.95);
+      const result = await recognizeWithAi(blob, {
+        provider: settings.aiProvider,
+        apiKey: settings.aiApiKey,
+        model: settings.aiModel,
+      });
+      mark(`لایه ابری صفحه ${i + 1}`, tAi);
+      aiResult = aiResult ?? result;
+      if (result.ok && result.fields) {
+        cloudPages.push({ ...result.fields, page: i + 1 });
+      } else if (!aiResult.ok) {
+        aiResult = result;
+      }
       continue;
     }
 
@@ -270,15 +304,69 @@ export async function processFile(
     }
   }
 
-  const rawText = textParts.join('\n\n');
+  // ابری جواب نداد: به‌جای از دست رفتن سند، با موتور محلی خوانده می‌شود
+  if (cloudOnly && !cloudPages.length) {
+    onStage('موتور ابری پاسخ نداد؛ خوانش محلی جایگزین', 0.5);
+    for (let i = 0; i < canvases.length; i++) {
+      const prepared = preparePage(canvases[i], settings.autoPreprocess, options.autoCrop !== false);
+      const local = await recognizeBest(prepared, settings, (stage, progress) =>
+        onStage(stage, 0.5 + ((i + progress) / canvases.length) * 0.4));
+      textParts.push(local.text);
+      confSum += local.confidence;
+    }
+  }
+
+  let rawText = textParts.join('\n\n');
   // نتیجه باکیفیت را برای پردازش‌های بعدی نگه دار
-  if (!cached && rawText.trim()) {
+  if (!cached && !cloudOnly && rawText.trim()) {
     const avg = Math.round(confSum / Math.max(1, canvases.length));
     await putCachedOcr(fileKey, rawText, avg, serverEngineUsed ? 'server' : 'local');
   }
 
   const tParse = performance.now();
   onStage('استخراج و تصحیح هوشمند فیلدها', 0.94);
+
+  if (cloudOnly && cloudPages.length) {
+    const cloud = buildCloudInvoice(mergeAiPages(cloudPages), {
+      defaultTaxRate: settings.defaultTaxRate,
+      currency: settings.currency,
+      providerLabel: AI_PROVIDERS[settings.aiProvider]?.label ?? 'سرویس ابری',
+      model: aiResult?.model,
+    });
+    rawText = cloud.transcript;
+    const cloudConfidence = cloud.parsed.fieldConfidence.items || 90;
+
+    if (deskewAngle >= 0.5) cloud.parsed.warnings.push(`سند حدود ${deskewAngle.toFixed(1)} درجه کج بود.`);
+    if (quality && quality.verdict !== 'good') {
+      quality.hints.forEach((hintText) => cloud.parsed.warnings.push(hintText));
+    }
+    mark('استخراج فیلدها', tParse);
+    const cloudInvoice: Invoice = {
+      ...invoiceFromParsed(cloud.parsed, {
+        fileName: file.name,
+        fileType: file.type || 'application/octet-stream',
+        thumbnail,
+        pages,
+        rawText,
+        ocrConfidence: Math.round(cloudConfidence),
+      }, settings),
+      category: options.category || 'خرید کالا',
+      costCenter: options.costCenter,
+    };
+    onStage('تکمیل شد', 1);
+    return {
+      invoice: cloudInvoice,
+      rawText,
+      confidence: Math.round(cloudConfidence),
+      meta: { fileName: file.name, fileType: file.type, thumbnail, pages },
+      source: 'ai',
+      preview,
+      free: { itemCount: cloud.parsed.items.length, usedTotals: true, itemsTotal: cloud.itemsTotal },
+      quality,
+      fromCache: false,
+      timings,
+    };
+  }
   let confidence = Math.round(confSum / Math.max(1, canvases.length));
   const fullSettings = settings ?? (await getSettings());
   const built = buildParsed(rawText, confidence, fullSettings.defaultTaxRate, structuredItems, structuredTotals, options.hint);

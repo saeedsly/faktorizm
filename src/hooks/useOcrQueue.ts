@@ -104,8 +104,8 @@ export function useOcrQueue() {
             hint: toVendorHint(vendor),
             category: item.options.category,
             costCenter: item.options.costCenter || vendor?.costCenter,
-            onAiConsent: ({ fileName, providerLabel }) =>
-              requestAiConsent({ fileName, providerLabel, filesCount: 1 }),
+            onAiConsent: ({ fileName, providerLabel, model, mode }) =>
+              requestAiConsent({ fileName, providerLabel, model, mode, filesCount: 1 }),
           };
           const result: ProcessResult = await processFile(file, settings, (stage, progress) => {
             const status = progress > 0.5 ? 'recognizing' : 'preparing';
