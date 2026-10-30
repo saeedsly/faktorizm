@@ -587,7 +587,10 @@ export function applyFreeTextAnalysis(
   analysis: FreeAnalysis,
   options: FreeMergeOptions = {},
 ): ParsedInvoice & { free?: FreeMergeInfo } {
-  const warnings = [...parsed.warnings];
+  // هشدارهای لایه حدسِ متنی وقتی اقلام از فهم نوشتاری آمده‌اند معنا ندارند
+  const warnings = [...parsed.warnings].filter(
+    (w) => !w.includes('ردیف‌های جدول اقلام') && !w.includes('اقلام را دستی کنترل کنید'),
+  );
   let usedTotals = false;
   let items = parsed.items;
 
