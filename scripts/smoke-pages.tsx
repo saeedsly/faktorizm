@@ -82,10 +82,13 @@ async function main() {
     paymentStatus: 'unpaid', issuerName: 'فروشنده آزمون', buyerName: 'من', date: '2026-02-01',
     items: [{ id: 'i1', title: 'کالای آزمون', quantity: 2, unitPrice: 500000, discount: 0, taxRate: 0 }],
     discountTotal: 0, taxTotal: 0, total: 0, category: 'خرید', tags: [], note: '', currency: 'IRT',
-    rawText: '', ocrConfidence: 90, fieldConfidence: {}, fileName: '', fileType: '', thumbnail: '',
+    rawText: 'فروشنده آزمون\nکالای آزمون ۲ ۵۰۰۰۰۰ ۱۰۰۰۰۰۰', ocrConfidence: 90,
+    fieldConfidence: { number: 92, items: 61, total: 88 }, fileName: '', fileType: '', thumbnail: '',
     pages: 1, source: 'scan', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   });
   await db.invoices.put(invoice);
+  // یک سند هم‌شماره برای آزمون هشدار تکراری
+  await db.invoices.put({ ...invoice, id: 'inv_smoke_dup', status: 'review' });
   await logAudit(invoice.id, 'آزمون تاریخچه');
   await snapshot(invoice, 'نسخه آزمون');
   await saveInstallments(invoice, 4, 30);
@@ -95,6 +98,24 @@ async function main() {
   checks.push([(await db.versions.where('invoiceId').equals(invoice.id).count()) >= 1, 'نسخه سند ذخیره شد']);
   checks.push([(await plansOf(invoice.id)).length === 4, 'چهار قسط در پایگاه داده ساخته شد']);
   checks.push([(await getVendor('فروشنده آزمون'))?.samples === 1, 'پروفایل فروشنده ساخته شد']);
+
+  // پنل‌های گردش کار سند جداگانه رندر می‌شوند (تاریخچه، اقساط، پیوست، دانش فروشنده…)
+  const panels = await import('../src/components/invoice/InvoicePanels');
+  const panelChecks: Array<[string, unknown]> = [
+    ['اقساط و برنامه پرداخت', React.createElement(panels.PaymentPlanCard, { invoice })],
+    ['تاریخچه و نسخه‌ها', React.createElement(panels.HistoryCard, { invoice, onRestored: () => undefined })],
+    ['پیوست‌های سند', React.createElement(panels.AttachmentsCard, { invoice, onChange: () => undefined })],
+    ['دانش فروشنده', React.createElement(panels.VendorCard, { invoice, onApply: () => undefined })],
+    ['اصلاح پیشنهادی متن', React.createElement(panels.AutofixCard, { invoice, onApplyText: () => undefined })],
+    ['هشدار تکراری', React.createElement(panels.DuplicateAlert, { invoice, onDismiss: () => undefined })],
+    ['کالاهای پرتکرار', React.createElement(panels.SuggestedItemsCard, { invoice, onAdd: () => undefined })],
+    ['اطمینان فیلدها', React.createElement(panels.ConfidenceBreakdown, { invoice })],
+    ['یادآور سررسید', React.createElement(panels.DueDateCard, { invoice, onChange: () => undefined })],
+  ];
+  for (const [label, element] of panelChecks) {
+    const html = await render(element as React.ReactElement, 500);
+    checks.push([html.length > 50, `پنل «${label}» بدون خطا رندر شد`]);
+  }
 
   checks.push([errors.length === 0, `بدون خطای زمان اجرا${errors.length ? `: ${errors.slice(0, 2).join(' | ')}` : ''}`]);
 
