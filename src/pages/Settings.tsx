@@ -16,7 +16,7 @@ import { checkServerOcr } from '@/lib/ocr/serverEngine';
 import { AI_PROVIDERS, testAiConnection } from '@/lib/ocr/aiEngine';
 import { PROVIDERS, FREE_BADGE, FREE_FIRST, keysOf } from '@/lib/ocr/providers';
 import type { ProviderId } from '@/lib/ocr/providers';
-import { ExternalLink, KeyRound, CheckCircle2, CloudCog } from 'lucide-react';
+import { ExternalLink, KeyRound, CheckCircle2, CloudCog, BookOpen } from 'lucide-react';
 
 /** نشانگر موتور فعال OCR: سرویس محلی PP-OCRv5 یا موتور داخلی مرورگر */
 function EngineBadge() {
@@ -271,16 +271,26 @@ export default function SettingsPage() {
                   <ol className="text-[11px] leading-6 text-muted-foreground list-decimal pr-4 space-y-0.5">
                     {PROVIDERS[s.aiProvider].keySteps.map((step) => <li key={step}>{step}</li>)}
                   </ol>
-                  {PROVIDERS[s.aiProvider].keyUrl && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                    {PROVIDERS[s.aiProvider].keyUrl && (
+                      <a
+                        href={PROVIDERS[s.aiProvider].keyUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                      >
+                        <ExternalLink size={11} /> باز کردن صفحه ساخت کلید
+                      </a>
+                    )}
                     <a
-                      href={PROVIDERS[s.aiProvider].keyUrl}
+                      href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/ai-setup.html`}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-accent hover:underline"
                     >
-                      <ExternalLink size={11} /> باز کردن صفحه ساخت کلید
+                      <BookOpen size={11} /> آموزش کامل گرفتن کلید رایگان
                     </a>
-                  )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between rounded-xl bg-muted p-3">

@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>آموزش گرفتن کلید رایگان Gemini برای فاکتوریزم</title>
+<style>
+  :root{
+    --bg:#0b1220; --card:#131c2e; --card2:#0f1728; --line:#22304a;
+    --text:#e8eef9; --muted:#9fb0c9; --primary:#5b8cff; --primary-soft:#182a4d;
+    --accent:#34d399; --accent-soft:#10321f; --warn:#fbbf24; --warn-soft:#33280d;
+    --danger:#f87171; --danger-soft:#3a1a1a;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --card2:#f0f3f9; --line:#dde4ef;
+      --text:#111a2b; --muted:#5b6b83; --primary:#2f6bff; --primary-soft:#e8efff;
+      --accent:#0f9d63; --accent-soft:#e4f7ee; --warn:#a86a00; --warn-soft:#fdf3dd;
+      --danger:#c03030; --danger-soft:#fdeaea;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:"Vazirmatn","IRANSans","Segoe UI",Tahoma,sans-serif;
+    line-height:1.9; font-size:15px;
+  }
+  .wrap{max-width:900px; margin:0 auto; padding:32px 20px 64px}
+  header.hero{
+    background:linear-gradient(135deg,#1d3a7a,#0f2450);
+    border:1px solid #2a4472; border-radius:22px; padding:28px 26px; color:#eaf1ff;
+    position:relative; overflow:hidden;
+  }
+  header.hero:after{
+    content:""; position:absolute; inset:auto -60px -80px auto; width:230px; height:230px;
+    background:radial-gradient(circle,rgba(91,140,255,.55),transparent 65%); filter:blur(8px);
+  }
+  .kicker{font-size:12px; letter-spacing:.4px; color:#9db6ea; margin:0 0 6px}
+  h1{margin:0 0 8px; font-size:26px; line-height:1.5}
+  .sub{margin:0; color:#c3d3f1; font-size:14px}
+  .meta{display:flex; flex-wrap:wrap; gap:8px; margin-top:16px}
+  .pill{background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18);
+    padding:4px 11px; border-radius:999px; font-size:12px}
+  section{margin-top:26px}
+  h2{font-size:19px; margin:0 0 12px; display:flex; align-items:center; gap:8px}
+  h2 .num{
+    display:inline-flex; width:28px; height:28px; border-radius:9px; background:var(--primary-soft);
+    color:var(--primary); align-items:center; justify-content:center; font-size:14px; font-weight:700;
+  }
+  .card{background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 20px}
+  .grid{display:grid; gap:14px}
+  @media(min-width:700px){ .grid.two{grid-template-columns:1fr 1fr} }
+  table{width:100%; border-collapse:collapse; font-size:13.5px}
+  th,td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:right}
+  th{color:var(--muted); font-weight:600; font-size:12.5px; background:var(--card2)}
+  tr:last-child td{border-bottom:0}
+  code, .mono{font-family:"Cascadia Mono",Consolas,monospace; direction:ltr; unicode-bidi:embed}
+  code{background:var(--card2); border:1px solid var(--line); padding:1px 6px; border-radius:6px; font-size:12.5px}
+  pre{margin:10px 0 0; background:var(--card2); border:1px solid var(--line); border-radius:12px;
+      padding:12px 14px; overflow:auto; direction:ltr; text-align:left; font-size:13px}
+  .callout{border-radius:14px; padding:13px 15px; margin-top:12px; font-size:13.5px; border:1px solid transparent}
+  .ok{background:var(--accent-soft); color:var(--accent); border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+  .warn{background:var(--warn-soft); color:var(--warn); border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+  .danger{background:var(--danger-soft); color:var(--danger); border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+  .info{background:var(--primary-soft); color:var(--primary); border-color:color-mix(in srgb,var(--primary) 35%,transparent)}
+  .callout b{color:inherit}
+  ol.steps{counter-reset:s; list-style:none; padding:0; margin:0}
+  ol.steps>li{counter-increment:s; position:relative; padding:0 46px 18px 0; border-right:2px dashed var(--line); margin-right:14px}
+  ol.steps>li:last-child{border-right:0; padding-bottom:0}
+  ol.steps>li:before{
+    content:counter(s); position:absolute; right:-15px; top:0; width:28px; height:28px; border-radius:50%;
+    background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; box-shadow:0 0 0 4px var(--card);
+  }
+  .step-title{font-weight:700; margin:0 0 4px}
+  .step-body{margin:0; color:var(--muted); font-size:13.5px}
+  /* نمایش شماتیک از صفحه گوگل */
+  .mock{border:1px solid var(--line); border-radius:14px; overflow:hidden; margin-top:12px; background:var(--card2)}
+  .mock-bar{display:flex; align-items:center; gap:6px; padding:8px 12px; background:var(--card);
+    border-bottom:1px solid var(--line); font-size:11.5px; color:var(--muted)}
+  .dot{width:9px; height:9px; border-radius:50%; background:#3c4a63}
+  .mock-body{padding:16px; font-size:13px}
+  .fake-btn{display:inline-block; background:var(--primary); color:#fff; border-radius:8px;
+    padding:6px 14px; font-size:12.5px; font-weight:700; margin-top:8px}
+  .fake-input{display:block; margin-top:8px; border:1px dashed color-mix(in srgb,var(--primary) 55%,transparent);
+    background:color-mix(in srgb,var(--primary-soft) 70%, transparent); border-radius:8px; padding:8px 10px;
+    font-family:monospace; direction:ltr; text-align:left; font-size:12px}
+  .tag{display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; font-weight:700}
+  .t-free{background:var(--accent-soft); color:var(--accent)}
+  .t-limit{background:var(--primary-soft); color:var(--primary)}
+  .checklist{list-style:none; padding:0; margin:0}
+  .checklist li{padding:7px 26px 7px 0; position:relative; border-bottom:1px dashed var(--line)}
+  .checklist li:last-child{border-bottom:0}
+  .checklist li:before{content:"☐"; position:absolute; right:0; color:var(--primary); font-size:15px}
+  footer{margin-top:34px; color:var(--muted); font-size:12px; text-align:center; line-height:2}
+  .label{font-size:11.5px; color:var(--muted); display:block; margin-bottom:3px}
+  @media print{
+    body{background:#fff; color:#000}
+    header.hero{background:#12306b !important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+    section{break-inside:avoid}
+    .card{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="kicker">فاکتوریزم — راهنمای خوانش ابری</p>
+    <h1>کلید رایگان Gemini را در ۳ دقیقه بگیر</h1>
+    <p class="sub">بهترین گزینه برای فاکتور فارسی: بدون کارت بانکی، بدون هزینه، دقت بالا در خواندن جدول و ارقام.</p>
+    <div class="meta">
+      <span class="pill">⏱ حدود ۳ دقیقه</span>
+      <span class="pill">💳 کارت بانکی لازم نیست</span>
+      <span class="pill">🎁 سقف رایگان روزانه</span>
+      <span class="pill">🔐 کلید فقط روی دستگاه خودت</span>
+    </div>
+  </header>
+
+  <section>
+    <h2><span class="num">۱</span> پیش از شروع</h2>
+    <div class="card">
+      <table>
+        <tr><th>مورد</th><th>وضعیت</th></tr>
+        <tr><td>حساب گوگل</td><td>لازم است — همان جیمیل معمولی کافی است</td></tr>
+        <tr><td>کارت بانکی</td><td>لازم نیست</td></tr>
+        <tr><td>هزینه</td><td>صفر؛ سقف مصرف رایگان دارد</td></tr>
+        <tr><td>اینترنت</td><td>لازم است</td></tr>
+        <tr><td>نسخه برنامه</td><td>فاکتوریزم ۲٫۰ به بالا</td></tr>
+      </table>
+      <div class="callout info">اگر در ایران هستی و صفحه گوگل باز نشد، بخش «اگر منطقه‌ات پشتیبانی نشود» در انتهای همین راهنما را بخوان؛ راه بدون ثبت‌نام هم گذاشته‌ام.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۲</span> شش قدم تا اولین خوانش</h2>
+    <div class="card">
+      <ol class="steps">
+        <li>
+          <p class="step-title">صفحه کلید را باز کن</p>
+          <p class="step-body">در مرورگر برو به <code>https://aistudio.google.com/apikey</code>. اگر باز نشد، <code>aistudio.google.com</code> را باز کن و از منوی سمت چپ <b>Get API key</b> را بزن.</p>
+          <div class="mock">
+            <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>aistudio.google.com/apikey</span></div>
+            <div class="mock-body">
+              <span class="label">Google AI Studio — API Keys</span>
+              <span class="fake-btn">Create API key</span>
+              <div class="fake-input">AIzaSy••••••••••••••••••••••••••••••   [Copy]</div>
+            </div>
+          </div>
+        </li>
+
+        <li>
+          <p class="step-title">با حساب گوگل وارد شو</p>
+          <p class="step-body">اگر اولین بار است، صفحه شرایط استفاده می‌آید؛ تیک پذیرش را بزن و ادامه بده.</p>
+        </li>
+
+        <li>
+          <p class="step-title">Create API key را بزن</p>
+          <p class="step-body">پنجره‌ای باز می‌شود و می‌پرسد کلید در کدام پروژه ساخته شود. گزینه <b>Create API key in new project</b> را انتخاب کن (ساده‌ترین راه).</p>
+        </li>
+
+        <li>
+          <p class="step-title">کلید را کپی کن</p>
+          <p class="step-body">کلید با <code>AIza</code> شروع می‌شود و حدود ۳۹ نویسه است. روی آیکن کپی بزن و همان لحظه در جای امنی نگه دار.</p>
+          <pre>AIzaSyD-1a2b3c4d5e6f7g8h9i0jKLMNOPQRST</pre>
+        </li>
+
+        <li>
+          <p class="step-title">کلید را در فاکتوریزم بگذار</p>
+          <p class="step-body">
+            تنظیمات ← بخش <b>خوانش</b> ← حالت <b>فقط ابری (دقیق‌ترین)</b> ← کارت <b>گوگل AI Studio (Gemini)</b>
+            ← کلید را در کادر <b>کلیدهای API</b> بچسبان ← مدل <code>gemini-2.5-flash</code> ← دکمه <b>آزمون اتصال</b>.
+          </p>
+          <div class="mock">
+            <div class="mock-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>فاکتوریزم / تنظیمات / خوانش</span></div>
+            <div class="mock-body">
+              <span class="label">کلیدهای API (هر خط یک کلید)</span>
+              <div class="fake-input">AIzaSy••••••••••••••••••••••••••••••</div>
+              <span class="fake-btn">آزمون اتصال</span>
+            </div>
+          </div>
+          <div class="callout ok">اگر پیام سبز «اتصال تایید شد» آمد، کار تمام است.</div>
+        </li>
+
+        <li>
+          <p class="step-title">یک فاکتور واقعی بخوان</p>
+          <p class="step-body">صفحه <b>اسکن</b> ← عکس فاکتور را بینداز ← <b>ارسال کن و بخوان</b>. اولین بار یک پنجره تأیید می‌آید که نام فایل، سرویس و مدل را نشان می‌دهد. بعد از خوانش، در صفحه ویرایش سند زبانه <b>«اقلام و متن OCR»</b> را ببین.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۳</span> سقف رایگان چقدر است؟</h2>
+    <div class="card">
+      <table>
+        <tr><th>مدل</th><th>درخواست در دقیقه</th><th>درخواست در روز</th></tr>
+        <tr><td><code>gemini-2.5-flash</code> <span class="tag t-free">پیشنهاد</span></td><td>حدود ۱۵</td><td>حدود ۱۵۰۰</td></tr>
+        <tr><td><code>gemini-2.5-flash-lite</code></td><td>بیشتر</td><td>حدود ۱۵۰۰</td></tr>
+      </table>
+      <p class="step-body" style="margin-top:10px">عدد دقیق در داشبورد خودت (همان صفحه کلید) نوشته شده و گوگل هر چند وقت آن را تغییر می‌دهد. سهمیه روزانه حدود ۱۱ صبح به وقت ایران صفر می‌شود.</p>
+      <div class="callout info"><b>ترفند بیشتر خواندن:</b> چند کلید رایگان بساز و در کادر «کلیدهای API» هر خط یکی بگذار. برنامه وقتی یکی به سقف خورد خودکار سراغ کلید بعدی می‌رود.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۴</span> اگر خطا دیدی</h2>
+    <div class="card">
+      <table>
+        <tr><th>پیام</th><th>معنی</th><th>راه‌حل</th></tr>
+        <tr><td>کد 401 / 403</td><td>کلید اشتباه یا حذف شده</td><td>کلید را دوباره کپی کن یا کلید تازه بساز</td></tr>
+        <tr><td>کد 429</td><td>رسیدن به سقف دقیقه یا روز</td><td>یک دقیقه صبر کن، یا کلید دوم اضافه کن</td></tr>
+        <tr><td>کد 404</td><td>نام مدل غلط</td><td>همان <code>gemini-2.5-flash</code> را بگذار</td></tr>
+        <tr><td>کد 5xx</td><td>اشکال موقت گوگل</td><td>چند دقیقه بعد دوباره بزن</td></tr>
+        <tr><td>پاسخ مدل قابل خواندن نبود</td><td>خروجی JSON نداد</td><td>دوباره بزن؛ اگر تکرار شد مدل را عوض کن</td></tr>
+        <tr><td>User location is not supported</td><td>منطقه پشتیبانی نمی‌شود</td><td>بخش بعدی را بخوان</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۵</span> اگر منطقه‌ات پشتیبانی نشود</h2>
+    <div class="card">
+      <div class="callout danger">
+        گوگل AI Studio برای برخی کشورها (از جمله ایران) به دلایل قانونی باز نمی‌شود. استفاده از VPN برای دور زدن این محدودیت
+        خلاف قوانین گوگل است و می‌تواند به تعلیق کلید و حساب منجر شود؛ توصیه نمی‌کنم.
+      </div>
+
+      <h3 style="font-size:16px; margin:18px 0 8px">گزینه الف — مدل محلی روی همین رایانه (بدون ثبت‌نام، بی‌نهایت)</h3>
+      <p class="step-body">هیچ حسابی لازم نیست و هیچ محدودیتی هم ندارد؛ فقط مدل را یک بار دانلود می‌کنی:</p>
+      <pre>winget install Ollama.Ollama
+ollama pull qwen2.5vl:7b</pre>
+      <p class="step-body" style="margin-top:8px">
+        سپس در تنظیمات: سرویس <b>«مدل محلی روی رایانه خودتان (Ollama)»</b> ← آدرس پایه
+        <code>http://localhost:11434/v1</code> ← مدل <code>qwen2.5vl:7b</code> ← آزمون اتصال. کلید نمی‌خواهد.
+      </p>
+      <div class="callout warn">نیازمندی: حدود ۸ گیگابایت رم آزاد. با کارت گرافیک، سرعت چند برابر می‌شود.</div>
+
+      <h3 style="font-size:16px; margin:20px 0 8px">گزینه ب — سرویس‌های دیگر با سقف رایگان</h3>
+      <table>
+        <tr><th>سرویس</th><th>صفحه ساخت کلید</th><th>مدل پیشنهادی</th></tr>
+        <tr><td>GitHub Models</td><td class="mono">github.com/settings/tokens</td><td><code>openai/gpt-4.1-mini</code></td></tr>
+        <tr><td>OpenRouter</td><td class="mono">openrouter.ai/keys</td><td><code>google/gemma-4-31b-it:free</code></td></tr>
+        <tr><td>Groq</td><td class="mono">console.groq.com/keys</td><td><code>llama-4-scout</code></td></tr>
+        <tr><td>Mistral</td><td class="mono">console.mistral.ai/api-keys</td><td><code>pixtral-12b-2409</code></td></tr>
+      </table>
+      <p class="step-body" style="margin-top:8px">برای هر کدام، در همان صفحه تنظیمات کارت سرویس را بزن؛ راهنمای ساخت کلید و لینکش همان‌جا هست.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۶</span> امنیت کلید</h2>
+    <div class="card">
+      <ul class="checklist">
+        <li>کلید مثل رمز عبور است؛ در چت، اسکرین‌شات یا فایل عمومی نگذارش.</li>
+        <li>کلید فقط در پایگاه داده همین دستگاه (IndexedDB) ذخیره می‌شود.</li>
+        <li>در فایل پشتیبان JSON صادر نمی‌شود؛ اگر پشتیبان را جایی ببری، کلید همراهش نمی‌رود.</li>
+        <li>اگر شک کردی لو رفته: در AI Studio کلید را Delete کن و کلید تازه بساز.</li>
+        <li>برنامه پیش از هر ارسال، نام فایل و سرویس و مدل را نشان می‌دهد و تصویر را ذخیره نمی‌کند.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۷</span> چک‌لیست</h2>
+    <div class="card">
+      <ul class="checklist">
+        <li>حساب گوگل دارم</li>
+        <li>صفحه <code>aistudio.google.com/apikey</code> را باز کردم</li>
+        <li><b>Create API key</b> زدم و کلید <code>AIza…</code> را کپی کردم</li>
+        <li>در تنظیمات ← خوانش، سرویس گوگل را انتخاب کردم</li>
+        <li>کلید را در «کلیدهای API» چسباندم</li>
+        <li>«آزمون اتصال» سبز شد</li>
+        <li>یک فاکتور خواندم و اقلامش را در زبانه «اقلام و متن OCR» دیدم</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    فاکتوریزم — طراحی و توسعه: سعید سالاری<br />
+    این راهنما آفلاین است و هیچ کلیدی داخل آن نیست. برای چاپ: Ctrl+P
+  </footer>
+</div>
+</body>
+</html>
