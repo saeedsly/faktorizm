@@ -40,6 +40,14 @@ export interface FreeTotals {
   itemsTotal?: number;
 }
 
+/** دانش ذخیره‌شده از فروشنده؛ به خوانش همان فروشنده کمک می‌کند */
+export interface VendorHint {
+  header: string[];
+  totalsKeywords: string[];
+  taxRate?: number;
+  currency?: 'IRR' | 'IRT';
+}
+
 export interface FreeAnalysis {
   items: FreeItem[];
   totals: FreeTotals;
@@ -56,6 +64,11 @@ function unifyDigits(text: string): string {
   return text
     .replace(/[۰-۹]/g, (d) => String(FA_DIGITS.indexOf(d)))
     .replace(/[٠-٩]/g, (d) => String(AR_DIGITS.indexOf(d)));
+}
+
+/** نرمال‌سازی کلیدواژه برای تطبیق و کلیدسازی (نام فروشنده، سرستون…) */
+export function normalizeKeyword(word: string): string {
+  return normalizeWord(word);
 }
 
 /** نرمال‌سازی برای تطبیق کلیدواژه: حذف نیم‌فاصله، علائم و یکسان‌سازی حروف */
@@ -211,8 +224,17 @@ const SUMMARY_KEYS = {
 type SummaryKind = keyof typeof SUMMARY_KEYS;
 
 /** نوع خط جمع‌بندی؛ null یعنی خط جمع‌بندی نیست */
-export function summaryKind(line: string, requireAmount = true): SummaryKind | null {
+export function summaryKind(
+  line: string,
+  requireAmount = true,
+  extra: Partial<Record<SummaryKind, string[]>> = {},
+): SummaryKind | null {
   if (requireAmount && amountsOf(line).length === 0) return null;
+  for (const key of Object.keys(extra) as SummaryKind[]) {
+    for (const phrase of extra[key] ?? []) {
+      if (containsPhrase(line, phrase)) return key;
+    }
+  }
   for (const key of ['tax', 'discount', 'preDiscount', 'payable'] as SummaryKind[]) {
     for (const phrase of SUMMARY_KEYS[key]) {
       if (containsPhrase(line, phrase)) return key;
@@ -399,15 +421,23 @@ export function assignRoles(numbers: number[], hint: Array<keyof Roles> = []): R
  * تحلیل متن خام فاکتور.
  * همیشه ساختار برمی‌گرداند؛ اگر چیزی پیدا نشد، فهرست خالی و هشدار می‌دهد.
  */
-export function analyzeInvoiceText(raw: string): FreeAnalysis {
+export function analyzeInvoiceText(raw: string, hint?: VendorHint): FreeAnalysis {
   const warnings: string[] = [];
   const lines = raw
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
     .filter((line) => line.length > 0);
 
-  let headerFields: Array<keyof Roles> = [];
-  const headerLabels: string[] = [];
+  // دانش فروشنده: اگر سرستون سند خوانده نشد، از دفعه قبلِ همین فروشنده استفاده کن
+  let headerFields: Array<keyof Roles> = hint?.header?.length
+    ? readHeader(hint.header.join(' '))
+    : [];
+  const headerLabels: string[] = hint?.header?.length ? [...hint.header] : [];
+  const extraKeywords: Partial<Record<SummaryKind, string[]>> = {};
+  if (hint?.totalsKeywords?.length) {
+    // کلیدواژه‌های اضافی فروشنده به دسته «قابل پرداخت» وصل می‌شوند
+    extraKeywords.payable = hint.totalsKeywords;
+  }
   const items: FreeItem[] = [];
   const totals: FreeTotals = {};
   const pending: Pending = { title: [] };
@@ -431,7 +461,7 @@ export function analyzeInvoiceText(raw: string): FreeAnalysis {
       continue;
     }
 
-    const kind = summaryKind(line) ?? summaryKind(line, false);
+    const kind = summaryKind(line, true, extraKeywords) ?? summaryKind(line, false, extraKeywords);
     if (kind) {
       takeSummary(line, kind);
       pending.title = [];

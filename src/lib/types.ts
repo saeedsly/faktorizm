@@ -35,6 +35,12 @@ export interface Invoice {
   /** مبلغ نهایی چاپ‌شده روی خود سند؛ اگر با جمع ردیف‌ها فرق داشته باشد همین عدد مرجع است */
   documentTotal?: number;
   category: string;
+  /** مرکز هزینه یا پروژه‌ای که این سند به آن تخصیص می‌یابد */
+  costCenter?: string;
+  /** پیوست‌های تکمیلی سند (قرارداد، رسید پرداخت، عکس دوم) */
+  attachments?: InvoiceAttachment[];
+  /** شماره سند فروشنده برای تشخیص تکراری */
+  issuerRef?: string;
   tags: string[];
   note: string;
   currency: 'IRR' | 'IRT';
@@ -51,6 +57,101 @@ export interface Invoice {
   createdAt: string;
   updatedAt: string;
   deletedAt?: number;
+}
+
+export interface InvoiceAttachment {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  /** data URL برای نگهداری آفلاین داخل مرورگر */
+  data: string;
+  addedAt: string;
+}
+
+/** یک رخداد در تاریخچه گردش کار سند */
+export interface AuditEntry {
+  id: string;
+  invoiceId: string;
+  at: string;
+  action: string;
+  from?: string;
+  to?: string;
+  note?: string;
+  actor?: string;
+}
+
+/** نسخه ذخیره‌شده سند برای بازگردانی */
+export interface InvoiceVersion {
+  id: string;
+  invoiceId: string;
+  at: string;
+  label: string;
+  /** JSON کامل سند در همان لحظه */
+  data: string;
+  amount: number;
+}
+
+/** قسط یا برنامه پرداخت سند */
+export interface PaymentPlan {
+  id: string;
+  invoiceId: string;
+  title: string;
+  amount: number;
+  dueDate: string;
+  paidAt?: string;
+  method?: string;
+  note?: string;
+}
+
+/** پروفایل فروشنده که از اسناد تأییدشده یاد گرفته می‌شود */
+export interface VendorProfile {
+  id: string;
+  name: string;
+  key: string;
+  samples: number;
+  lastSeenAt: string;
+  header: string[];
+  totalsKeywords: string[];
+  currency: 'IRR' | 'IRT';
+  defaultTaxRate: number;
+  avgTotal: number;
+  category?: string;
+  costCenter?: string;
+}
+
+/** نتیجه کش‌شده خوانش برای جلوگیری از پردازش تکراری */
+export interface OcrCacheEntry {
+  key: string;
+  text: string;
+  confidence: number;
+  source: string;
+  at: string;
+}
+
+/** پاسخ کش‌شده سرویس ابری */
+export interface AiCacheEntry {
+  key: string;
+  payload: string;
+  at: string;
+}
+
+/** شمارنده مصرف روزانه سرویس ابری */
+export interface UsageEntry {
+  day: string;
+  calls: number;
+  chars: number;
+}
+
+/** فایل در انتظار پردازش که در مرورگر نگه داشته می‌شود */
+export interface QueuedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  priority: number;
+  addedAt: string;
+  data: Blob;
 }
 
 export interface Contact {
@@ -148,4 +249,10 @@ export interface OcrJob {
   error?: string;
   startedAt?: number;
   finishedAt?: number;
+  /** اولویت در صف؛ عدد بزرگ‌تر زودتر پردازش می‌شود */
+  priority?: number;
+  /** مرحله‌های زمانی برای گزارش سرعت */
+  stages?: { stage: string; at: number }[];
+  /** منبع خوانش نهایی */
+  source?: 'local' | 'ai' | 'hybrid';
 }

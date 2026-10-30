@@ -1,5 +1,9 @@
 import Dexie, { type Table } from 'dexie';
-import type { Invoice, Contact, Product, ApiKey, Webhook, Activity, AppSettings } from './types';
+import type {
+  Invoice, Contact, Product, ApiKey, Webhook, Activity, AppSettings,
+  AuditEntry, InvoiceVersion, PaymentPlan, VendorProfile, OcrCacheEntry, AiCacheEntry,
+  UsageEntry, QueuedFile,
+} from './types';
 
 class FaktorizmDB extends Dexie {
   invoices!: Table<Invoice, string>;
@@ -9,6 +13,14 @@ class FaktorizmDB extends Dexie {
   webhooks!: Table<Webhook, string>;
   activities!: Table<Activity, string>;
   settings!: Table<AppSettings, string>;
+  audit!: Table<AuditEntry, string>;
+  versions!: Table<InvoiceVersion, string>;
+  paymentPlans!: Table<PaymentPlan, string>;
+  vendors!: Table<VendorProfile, string>;
+  ocrCache!: Table<OcrCacheEntry, string>;
+  aiCache!: Table<AiCacheEntry, string>;
+  usage!: Table<UsageEntry, string>;
+  queue!: Table<QueuedFile, string>;
 
   constructor() {
     super('faktorizm-db');
@@ -20,6 +32,24 @@ class FaktorizmDB extends Dexie {
       webhooks: 'id, enabled, createdAt',
       activities: 'id, at, entity, action',
       settings: 'id',
+    });
+    // نسخه ۲: تاریخچه، نسخه‌ها، اقساط، پروفایل فروشنده، کش خوانش و صف پایدار
+    this.version(2).stores({
+      invoices: 'id, number, status, paymentStatus, direction, category, contactId, date, createdAt, updatedAt, deletedAt, source, issuerName, costCenter',
+      contacts: 'id, name, type, createdAt',
+      products: 'id, code, title, category, usageCount, createdAt',
+      apiKeys: 'id, key, enabled, createdAt',
+      webhooks: 'id, enabled, createdAt',
+      activities: 'id, at, entity, action',
+      settings: 'id',
+      audit: 'id, invoiceId, at, action',
+      versions: 'id, invoiceId, at',
+      paymentPlans: 'id, invoiceId, dueDate, paidAt',
+      vendors: 'id, key, name, lastSeenAt',
+      ocrCache: 'key, at',
+      aiCache: 'key, at',
+      usage: 'day',
+      queue: 'id, priority, addedAt',
     });
   }
 }

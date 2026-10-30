@@ -150,6 +150,11 @@ export async function setStatus(ids: string[], status: Invoice['status']): Promi
   logActivity('تغییر گروهی وضعیت', 'invoice', `${ids.length} فاکتور → ${status}`);
 }
 
+export async function setPaymentStatus(ids: string[], status: Invoice['paymentStatus']): Promise<void> {
+  await Promise.all(ids.map((id) => db.invoices.update(id, { paymentStatus: status, updatedAt: new Date().toISOString() })));
+  logActivity('تغییر گروهی وضعیت پرداخت', 'invoice', `${ids.length} فاکتور → ${status}`);
+}
+
 export async function ensureProduct(title: string, fallbackPrice: number, taxRate: number) {
   const found = await db.products.filter((p) => p.title === title).first();
   return found ?? null;

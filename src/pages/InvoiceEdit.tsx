@@ -4,11 +4,18 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { toast } from 'sonner';
 import {
   Save, Printer, Trash2, Plus, Trash, CheckCircle2, FileText, ScanText, Image as ImageIcon,
-  ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info, Maximize2,
+  ShieldCheck, ChevronDown, X, Copy, Bot, AlertTriangle, Info, Maximize2, Share2, Workflow,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import MoneyInput from '@/components/MoneyInput';
 import InvoiceSummary from '@/components/InvoiceSummary';
+import {
+  AttachmentsCard, PaymentPlanCard, HistoryCard, AutofixCard, VendorCard,
+  DuplicateAlert, SuggestedItemsCard, ConfidenceBreakdown, DueDateCard,
+} from '@/components/invoice/InvoicePanels';
+import { logAudit, snapshot } from '@/lib/invoices/workflow';
+import { learnFromInvoice } from '@/lib/vendors';
+import { shareInvoiceText, exportInvoiceText } from '@/lib/exporters/documents';
 import { Button, Card, CardTitle, Input, Textarea, Select, Label, Badge, Tabs, ConfidenceBar, EmptyState } from '@/components/ui/primitives';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { db } from '@/lib/db';
@@ -114,7 +121,18 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
     if (!toSave.issuerName.trim()) {
       toast.warning('نام طرف حساب خالی است', { description: 'بهتر است فروشنده فاکتور مشخص باشد' });
     }
+    if (mode === 'edit') await snapshot(invoice, 'پیش از ذخیره');
     await saveInvoice(toSave, mode === 'create' ? 'create' : 'edit');
+    if (mode === 'create') {
+      await logAudit(toSave.id, 'سند ایجاد شد', { to: toSave.status });
+    } else if (newStatus && newStatus !== invoice.status) {
+      await logAudit(toSave.id, 'وضعیت سند تغییر کرد', { from: invoice.status, to: newStatus });
+    } else {
+      await logAudit(toSave.id, 'سند ویرایش شد');
+    }
+    if (toSave.status === 'approved' && toSave.issuerName.trim()) {
+      await learnFromInvoice(toSave);
+    }
     toast.success(mode === 'create' ? 'فاکتور ثبت شد' : 'تغییرات ذخیره شد');
     if (mode === 'create') navigate(`/invoices/${toSave.id}`, { replace: true });
     setSavedAt(new Date());
@@ -138,6 +156,14 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
           <>
             {savedAt && <span className="text-[11px] text-muted-foreground hidden md:block">ذخیره خودکار: {toFaDigits(savedAt.toLocaleTimeString('fa-IR'))}</span>}
             <Button variant="outline" size="sm" onClick={() => printInvoice(invoice, settings)}><Printer size={15} /> چاپ / PDF</Button>
+            <Button variant="outline" size="sm" onClick={async () => {
+              const result = await shareInvoiceText(invoice);
+              if (result === 'shared') toast.success('خلاصه سند به اشتراک گذاشته شد');
+              else if (result === 'copied') toast.success('خلاصه سند کپی شد', { description: 'در پیام‌رسان یا اکسل بچسبانید.' });
+              else { exportInvoiceText(invoice); toast.success('فایل متنی سند ذخیره شد'); }
+            }}>
+              <Share2 size={15} /> اشتراک متن
+            </Button>
             {mode === 'edit' && (
               <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}><Trash2 size={15} /></Button>
             )}
@@ -158,11 +184,13 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
             tabs={[
               { id: 'form', label: 'اطلاعات فاکتور', icon: <FileText size={15} /> },
               { id: 'ocr', label: 'متن خام OCR', icon: <ScanText size={15} /> },
+              { id: 'workflow', label: 'پیگیری و گردش کار', icon: <Workflow size={15} /> },
             ]}
           />
 
           {tab === 'form' && (
             <>
+              <DuplicateAlert invoice={invoice} onDismiss={() => undefined} />
               {lowConfidenceFields.length > 0 && (
                 <div className="card !p-4 flex items-start gap-3 bg-warning-soft border-transparent animate-slide-up">
                   <ShieldCheck size={20} className="text-warning shrink-0 mt-0.5" />
@@ -234,9 +262,16 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                       <option value="IRR">ریال</option>
                     </Select>
                   </Field>
+                  <Field label="مرکز هزینه / پروژه">
+                    <Input list="cost-center-list" value={invoice.costCenter ?? ''}
+                      onChange={(e) => patch({ costCenter: e.target.value })} placeholder="مثلاً شعبه مرکزی" />
+                  </Field>
                 </div>
                 <datalist id="contacts-list">
                   {contacts.map((c) => <option key={c.id} value={c.name} />)}
+                </datalist>
+                <datalist id="cost-center-list">
+                  {['شعبه مرکزی', 'انبار', 'تولید', 'اداری', 'فروش'].map((c) => <option key={c} value={c} />)}
                 </datalist>
                 <datalist id="category-list">
                   {['خرید کالا', 'مواد غذایی', 'لوازم اداری', 'الکترونیک', 'خدمات چاپ', 'حمل‌ونقل', 'ساختمانی', 'قبوض و خدمات'].map((c) =>
@@ -437,6 +472,42 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                   </p>
                 )}
               </Card>
+
+              <AutofixCard
+                invoice={invoice}
+                onApplyText={(text) => {
+                  setInvoice((prev) => prev ? { ...prev, rawText: text, updatedAt: new Date().toISOString() } : prev);
+                  void logAudit(invoice.id, 'متن خام اصلاح شد');
+                }}
+              />
+            </div>
+          )}
+
+          {tab === 'workflow' && (
+            <div className="space-y-5">
+              <DuplicateAlert invoice={invoice} onDismiss={() => undefined} />
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <ConfidenceBreakdown invoice={invoice} />
+                <DueDateCard invoice={invoice} onChange={(dateText) => patch({ dueDate: dateText || undefined })} />
+              </div>
+
+              <PaymentPlanCard invoice={invoice} />
+              <HistoryCard invoice={invoice} onRestored={(restored) => { setInvoice(restored); setDateText(toJalali(restored.date)); }} />
+              <AttachmentsCard invoice={invoice} onChange={(attachments) => patch({ attachments })} />
+              <VendorCard invoice={invoice} onApply={(p) => patch(p)} />
+              <SuggestedItemsCard
+                invoice={invoice}
+                onAdd={(product) => {
+                  patch({
+                    items: [...invoice.items, {
+                      id: uid('itm_'), title: product.title, quantity: 1,
+                      unitPrice: product.unitPrice, discount: 0, taxRate: product.taxRate,
+                    }],
+                  });
+                  toast.success('کالا اضافه شد');
+                }}
+              />
             </div>
           )}
         </div>

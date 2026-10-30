@@ -26,5 +26,11 @@ export function isPdf(file: { type: string; name: string }): boolean {
 }
 
 export function isImage(file: { type: string; name: string }): boolean {
-  return file.type.startsWith('image/') || /\.(jpe?g|png|webp|bmp|gif)$/i.test(file.name);
+  return file.type.startsWith('image/')
+    || /\.(jpe?g|png|webp|bmp|gif|hei[cf]|tiff?|avif)$/i.test(file.name);
+}
+
+/** فرمت‌هایی که مرورگرها معمولاً خودشان رمزگشایی نمی‌کنند */
+export function isExoticImage(file: { type: string; name: string }): boolean {
+  return /\.(hei[cf]|tiff?)$/i.test(file.name) || /heic|heif|tiff?/i.test(file.type);
 }
