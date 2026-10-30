@@ -13,6 +13,8 @@ import {
   AttachmentsCard, PaymentPlanCard, HistoryCard, AutofixCard, VendorCard,
   DuplicateAlert, SuggestedItemsCard, ConfidenceBreakdown, DueDateCard,
 } from '@/components/invoice/InvoicePanels';
+import ItemIntelligence from '@/components/invoice/ItemIntelligence';
+import { detectItems } from '@/lib/ocr/items';
 import { logAudit, snapshot } from '@/lib/invoices/workflow';
 import { learnFromInvoice } from '@/lib/vendors';
 import { shareInvoiceText, exportInvoiceText } from '@/lib/exporters/documents';
@@ -87,6 +89,11 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoice]);
+
+  const itemReview = useMemo(
+    () => (invoice?.rawText?.trim() ? detectItems(invoice.rawText) : null),
+    [invoice?.rawText],
+  );
 
   const totals = useMemo(() => {
     if (!invoice) return null;
@@ -183,7 +190,7 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
             onChange={setTab}
             tabs={[
               { id: 'form', label: 'اطلاعات فاکتور', icon: <FileText size={15} /> },
-              { id: 'ocr', label: 'متن خام OCR', icon: <ScanText size={15} /> },
+              { id: 'ocr', label: 'اقلام و متن OCR', icon: <ScanText size={15} /> },
               { id: 'workflow', label: 'پیگیری و گردش کار', icon: <Workflow size={15} /> },
             ]}
           />
@@ -191,6 +198,25 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
           {tab === 'form' && (
             <>
               <DuplicateAlert invoice={invoice} onDismiss={() => undefined} />
+              {itemReview && (itemReview.missing.length > 0 || itemReview.items.some((item) => item.needsReview)) && (
+                <div className="card !p-4 flex items-start gap-3 bg-info-soft border-transparent animate-slide-up">
+                  <ScanText size={20} className="text-info shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-info mb-1">هوش اقلام یک نکته دارد</p>
+                    <p className="text-xs leading-6 text-muted-foreground">
+                      {itemReview.items.filter((item) => item.needsReview).length > 0
+                        && `${toFaDigits(itemReview.items.filter((item) => item.needsReview).length)} ردیف اطمینان کم دارد`}
+                      {itemReview.items.filter((item) => item.needsReview).length > 0 && itemReview.missing.length > 0 && ' و '}
+                      {itemReview.missing.length > 0 && 'به‌نظر یک ردیف در خوانش جا افتاده است'}
+                      ؛ در زبانه «اقلام و متن OCR» می‌توانید نقش هر خط را ببینید و اصلاح کنید.
+                    </p>
+                    <button onClick={() => setTab('ocr')}
+                      className="mt-1 text-[11px] font-bold text-primary hover:underline">
+                      بررسی خط‌به‌خط اقلام
+                    </button>
+                  </div>
+                </div>
+              )}
               {lowConfidenceFields.length > 0 && (
                 <div className="card !p-4 flex items-start gap-3 bg-warning-soft border-transparent animate-slide-up">
                   <ShieldCheck size={20} className="text-warning shrink-0 mt-0.5" />
@@ -447,6 +473,11 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                 )}
               </Card>
 
+              <ItemIntelligence invoice={invoice} onApply={(items) => {
+                patch({ items });
+                toast.success('اقلام بازسازی شد', { description: `${items.length} ردیف از روی تحلیل خطوط متن` });
+              }} />
+
               <Card>
                 <CardTitle title="متن خام خوانده‌شده"
                   sub="همان چیزی که موتور از تصویر دیده است؛ برای مقایسه و بازبینی"
@@ -486,6 +517,25 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
           {tab === 'workflow' && (
             <div className="space-y-5">
               <DuplicateAlert invoice={invoice} onDismiss={() => undefined} />
+              {itemReview && (itemReview.missing.length > 0 || itemReview.items.some((item) => item.needsReview)) && (
+                <div className="card !p-4 flex items-start gap-3 bg-info-soft border-transparent animate-slide-up">
+                  <ScanText size={20} className="text-info shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-info mb-1">هوش اقلام یک نکته دارد</p>
+                    <p className="text-xs leading-6 text-muted-foreground">
+                      {itemReview.items.filter((item) => item.needsReview).length > 0
+                        && `${toFaDigits(itemReview.items.filter((item) => item.needsReview).length)} ردیف اطمینان کم دارد`}
+                      {itemReview.items.filter((item) => item.needsReview).length > 0 && itemReview.missing.length > 0 && ' و '}
+                      {itemReview.missing.length > 0 && 'به‌نظر یک ردیف در خوانش جا افتاده است'}
+                      ؛ در زبانه «اقلام و متن OCR» می‌توانید نقش هر خط را ببینید و اصلاح کنید.
+                    </p>
+                    <button onClick={() => setTab('ocr')}
+                      className="mt-1 text-[11px] font-bold text-primary hover:underline">
+                      بررسی خط‌به‌خط اقلام
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <ConfidenceBreakdown invoice={invoice} />

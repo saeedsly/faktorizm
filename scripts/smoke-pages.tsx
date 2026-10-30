@@ -101,6 +101,7 @@ async function main() {
 
   // پنل‌های گردش کار سند جداگانه رندر می‌شوند (تاریخچه، اقساط، پیوست، دانش فروشنده…)
   const panels = await import('../src/components/invoice/InvoicePanels');
+  const { default: ItemIntelligence } = await import('../src/components/invoice/ItemIntelligence');
   const panelChecks: Array<[string, unknown]> = [
     ['اقساط و برنامه پرداخت', React.createElement(panels.PaymentPlanCard, { invoice })],
     ['تاریخچه و نسخه‌ها', React.createElement(panels.HistoryCard, { invoice, onRestored: () => undefined })],
@@ -111,6 +112,13 @@ async function main() {
     ['کالاهای پرتکرار', React.createElement(panels.SuggestedItemsCard, { invoice, onAdd: () => undefined })],
     ['اطمینان فیلدها', React.createElement(panels.ConfidenceBreakdown, { invoice })],
     ['یادآور سررسید', React.createElement(panels.DueDateCard, { invoice, onChange: () => undefined })],
+    ['هوش اقلام', React.createElement(ItemIntelligence, {
+      invoice: {
+        ...invoice,
+        rawText: 'فروشگاه آزمون\nتعداد قیمت واحد مبلغ\nروغن سرخ کردنی\n1 ۵۰۰٬۰۰۰ ۵۰۰٬۰۰۰\nجمع کل ۵۰۰٬۰۰۰',
+      },
+      onApply: () => undefined,
+    })],
   ];
   for (const [label, element] of panelChecks) {
     const html = await render(element as React.ReactElement, 500);

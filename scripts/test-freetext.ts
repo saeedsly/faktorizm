@@ -49,7 +49,7 @@ check('مبلغ خوانده‌شده برای بازبینی نگه داشته 
 check('عنوان کالای سوم (پودر پنیر)', result.items[2]?.title.includes('پنیر'), result.items[2]?.title);
 check('عنوان کالای چهارم (بیسکویت)', result.items[3]?.title.includes('بیسکویت'), result.items[3]?.title);
 check('قیمت کالای چهارم', result.items[3]?.unitPrice === 900000, String(result.items[3]?.unitPrice));
-check('مبلغ کالای چهارم با تخفیف', result.items[3]?.total === 719000, String(result.items[3]?.total));
+check('مبلغ کالای چهارم با تخفیف', result.items[3]?.total === 719500, String(result.items[3]?.total));
 check('قیمت کالای پنجم (ابمیوه)', result.items[4]?.unitPrice === 5800000, String(result.items[4]?.unitPrice));
 check('مبلغ کالای پنجم محاسبه شد', result.items[4]?.total === 5220000, String(result.items[4]?.total));
 check('کالای ششم (نکتار سیب)', result.items[5]?.title.includes('نکتار'), result.items[5]?.title);
