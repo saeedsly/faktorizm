@@ -113,14 +113,86 @@ export function parseAmountToken(token: string): number | null {
 }
 
 /** همه اعداد یک خط، به ترتیب ظهور در متن (راست‌به‌چپ تصویر) */
-export function amountsOf(line: string): number[] {
-  const out: number[] = [];
+/** نویسه‌هایی که موتور OCR جای رقم می‌گذارد (O جای ۰، l جای ۱، B جای ۸ …) */
+const DIGIT_LOOKALIKE: Record<string, string> = {
+  O: '0', o: '0', Q: '0', D: '0', U: '0', Θ: '0',
+  I: '1', l: '1', i: '1', '|': '1', '!': '1', ']': '1', '[': '1', 'ᛁ': '1',
+  Z: '2', z: '2',
+  E: '3', A: '4', '@': '4',
+  S: '5', s: '5', $: '5',
+  b: '6', G: '6',
+  T: '7', '/': '7',
+  B: '8',
+  g: '9', q: '9',
+};
+
+const IGNORED_IN_NUMBER = /[٪%¥$*"'`^~_]/g;
+// فقط حروف فارسی/عربی؛ جداکننده‌هایی مثل «٬» و «٫» و ارقام فارسی جزو حروف نیستند
+const PERSIAN_LETTER = /[\u0621-\u064A\u066E-\u06D3\u200C]/;
+
+/**
+ * خواندن یک توکن عددی که OCR خرابش کرده است.
+ *
+ * «QOAe,000» را نمی‌شود عدد خواند مگر با جدول نویسه‌های شبیه رقم.
+ * فقط توکنی بازیابی می‌شود که دست‌کم یک رقم واقعی و یک جداکننده یا طول کافی
+ * داشته باشد؛ واژه‌های فارسی و متن انگلیسی عادی هرگز عدد نمی‌شوند.
+ */
+export function recoverToken(token: string): number | null {
+  const latin = unifyDigits(token).replace(IGNORED_IN_NUMBER, '');
+  if (!latin || PERSIAN_LETTER.test(latin)) return null;
+  if (/^[\d.,:٬،٫]+$/.test(latin)) return parseAmountToken(latin);
+
+  let digits = '';
+  let foreign = 0;
+  for (const char of latin) {
+    if (/\d/.test(char)) { digits += char; continue; }
+    if (/[.,:٬،٫]/.test(char)) { digits += char; continue; }
+    const mapped = DIGIT_LOOKALIKE[char];
+    if (mapped) digits += mapped;
+    else foreign++;
+  }
+  if (!digits.replace(/[^\d]/g, '')) return null;      // هیچ رقمی ندارد
+  if (foreign > 1) return null;                          // واژه است، نه عدد
+  // واژه لاتین که فقط نویسه‌های شبیه رقم دارد («IDOI») عدد نیست؛
+  // مگر جداکننده هزارگان داشته باشد که نشانه مبلغ است.
+  if (!/[\d]/.test(latin) && !/[.,:٬،٫]/.test(latin)) return null;
+  return parseAmountToken(digits.replace(/^[.,:]+|[.,:]+$/g, ''));
+}
+
+export interface AmountToken {
+  value: number;
+  /** رقم‌ها مخدوش بوده‌اند و با جدول نویسه‌های مشابه بازیابی شده‌اند */
+  repaired: boolean;
+}
+
+/** اعداد یک خط همراه با این نکته که خوانششان سالم بوده یا بازیابی شده */
+export function amountDetails(line: string): AmountToken[] {
+  const out: AmountToken[] = [];
   const latin = unifyDigits(line);
-  for (const match of latin.match(NUMBER_RUN) ?? []) {
-    const value = parseAmountToken(match);
-    if (value !== null && Number.isFinite(value)) out.push(value);
+  for (const token of latin.split(/[\s|]+/)) {
+    if (!token) continue;
+    // رقم چسبیده به واژه فارسی («۱۸۰۵۰۵فراگوشت») کد است، نه مبلغ
+    if (PERSIAN_LETTER.test(token) && /\d/.test(token)) continue;
+    const value = recoverToken(token);
+    if (value !== null && Number.isFinite(value)) {
+      const repaired = !/^[\d.,:٬،٫]+$/.test(token.replace(IGNORED_IN_NUMBER, ''));
+      out.push({ value, repaired });
+    }
   }
   return out;
+}
+
+/** همه اعداد یک خط، به ترتیب ظهور در متن (راست‌به‌چپ تصویر) */
+export function amountsOf(line: string): number[] {
+  return amountDetails(line).map((token) => token.value);
+}
+
+/** نسبت حروف فارسی به همه حروف یک خط؛ برای تشخیص خطوط نویزی لاتین */
+export function persianRatio(text: string): number {
+  const persian = (text.match(/[\u0600-\u06FF]/g) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  const total = persian + latin;
+  return total === 0 ? 0 : persian / total;
 }
 
 // ------------------------------------------------------------------ سرستون‌ها
@@ -162,6 +234,7 @@ export function isHeaderLine(line: string, fields: Array<keyof Roles>): boolean 
 // ------------------------------------------------------------------ خطوط نویزی
 
 export const META_WORDS = [
+  'شماره فاکتور', 'شماره سند', 'شماره سفارش', 'فاکتور شماره', 'شماره صورتحساب',
   'کد اقتصادی', 'شناسه ملی', 'کد ملی', 'تلفن', 'فکس', 'سایت', 'وب سایت', 'اینترنت',
   'شماره مرجع', 'شماره کارت', 'شماره حساب', 'شبا', 'کد پستی', 'کدپستی', 'امور مشتریان',
   'آدرس', 'نشانی', 'شعبه', 'تاریخ', 'ساعت', 'سریال', 'کد رهگیری', 'بارکد',

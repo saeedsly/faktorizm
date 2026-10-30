@@ -8,6 +8,7 @@ import {
   compareWithHistory, rejectedLines,
 } from '../src/lib/ocr/items';
 import { guessCategory, findUnit, cleanTitle, hasProductWord } from '../src/lib/ocr/lexicon';
+import { recoverToken, amountsOf } from '../src/lib/ocr/primitives';
 
 let passed = 0;
 let failed = 0;
@@ -124,6 +125,40 @@ check('تحلیل متن یکسان، نتیجه یکسان می‌دهد',
 const empty = detectItems('سلام، خوبی؟ امروز هوا خوب است');
 check('متن غیرفاکتور هیچ قلمی نمی‌سازد', empty.items.length === 0);
 check('برای متن غیرفاکتور هشدار داده می‌شود', empty.warnings.some((w) => w.includes('هیچ ردیف')));
+
+/* ---------------------------------------- ۱۲.۵) متن OCR مخدوش (فاکتور واقعی) */
+const dirty = readFileSync(`${process.cwd()}/scripts/ocr-bench/sample-real-ocr.txt`, 'utf-8');
+const dirtyAnalysis = detectItems(dirty);
+
+check('در متن مخدوش هم شش کالا شناخته می‌شود', dirtyAnalysis.items.length === 6,
+  JSON.stringify(dirtyAnalysis.items.map((item) => item.title)));
+check('نام کالاها از آشغال اسکن پاک است',
+  dirtyAnalysis.items.every((item) => !/[|©»\[]|Aleg|Gog|\bGm\b/.test(item.title)),
+  JSON.stringify(dirtyAnalysis.items.map((item) => item.title)));
+check('کد چسبیده به نام کالا حذف شد',
+  dirtyAnalysis.items[0].title === 'سیته مرغ با کتف فراگوشت', dirtyAnalysis.items[0].title);
+check('خطوط لاتین بی‌معنا کالا نشدند',
+  !dirtyAnalysis.items.some((item) => /TTI|IDOI|ogra|Vi%eee/i.test(item.title)));
+check('سربرگ فروشگاه کالا نشد', !dirtyAnalysis.items.some((item) => item.title.includes('افق‌کوروش')));
+check('پانویس و متن جشنواره کالا نشد',
+  !dirtyAnalysis.items.some((item) => /جشنواره|امتیاز|فروشگاه/.test(item.title)));
+check('مبلغ بازسازی‌شده از نویسه مخدوش جعل نمی‌شود',
+  dirtyAnalysis.items.every((item) => item.unitPrice === 0 && item.total === 0));
+check('ردیف‌های بی‌مبلغ برای بازبینی علامت خورده‌اند',
+  dirtyAnalysis.items.every((item) => item.needsReview === true));
+check('هشدار «مبلغ خوانده نشد» به کاربر داده می‌شود',
+  dirtyAnalysis.warnings.some((warning) => warning.includes('هیچ مبلغی')),
+  JSON.stringify(dirtyAnalysis.warnings));
+check('تخفیف تنها و بی‌پشتوانه از جمع‌ها حذف شد', dirtyAnalysis.totals.discount === undefined,
+  JSON.stringify(dirtyAnalysis.totals));
+
+/* ---------------------------------------------------- ۱۲.۶) بازیابی رقم */
+check('عدد با نویسه‌های شبیه رقم بازیابی می‌شود', recoverToken('QOAe,000') === 4000, String(recoverToken('QOAe,000')));
+check('واژه لاتین شبیه رقم، عدد نمی‌شود', recoverToken('IDOI') === null);
+check('واژه انگلیسی معمولی عدد نمی‌شود', recoverToken('P.QVeoce') === null);
+check('رقم چسبیده به واژه فارسی مبلغ نمی‌شود', amountsOf('۱۸۰۵۰۵فراگوشت').length === 0);
+check('جداکننده فارسی هزارگان درست خوانده می‌شود',
+  amountsOf('۲۵٬۳۲۴٬۰۰۰')[0] === 25324000, String(amountsOf('۲۵٬۳۲۴٬۰۰۰')[0]));
 
 /* ---------------------------------------------------- ۱۳) خطوط تکی */
 const single = classifyLines('۲۱٬۷۰۱٬۵۳۱٬۹۵۵٬۱۸۵');

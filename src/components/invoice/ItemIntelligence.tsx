@@ -124,6 +124,15 @@ export default function ItemIntelligence({ invoice, onApply }: {
           )}
         </div>
 
+        {analysis.items.length > 0 && !analysis.items.some((item) => item.unitPrice > 0) && (
+          <div className="mb-3 rounded-xl bg-warning-soft px-3 py-2 text-[11px] leading-5 text-warning flex items-start gap-1.5">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>
+              نام کالاها سالم خوانده شد ولی <b>هیچ مبلغی</b> در تصویر قابل خواندن نبود (ارقام مخدوش‌اند).
+              اقلام را اعمال کنید و قیمت‌ها را دستی وارد کنید، یا از تصویر واضح‌تری استفاده کنید.
+            </span>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex p-1 rounded-xl bg-muted gap-1">
             {([
@@ -171,9 +180,15 @@ export default function ItemIntelligence({ invoice, onApply }: {
                     {item.needsReview && <Badge className="bg-warning-soft text-warning !text-[10px]"><AlertTriangle size={10} /> نیازمند بازبینی</Badge>}
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-1 tabular-nums">
-                    {toFaDigits(item.quantity)} × {formatMoney(item.unitPrice, invoice.currency)}
-                    {item.discount > 0 && <> − تخفیف {formatMoney(item.discount, invoice.currency)}</>}
-                    {' = '}<span className="font-bold text-foreground">{formatMoney(item.total, invoice.currency)}</span>
+                    {item.unitPrice > 0 || item.total > 0 ? (
+                      <>
+                        {toFaDigits(item.quantity)} × {formatMoney(item.unitPrice, invoice.currency)}
+                        {item.discount > 0 && <> − تخفیف {formatMoney(item.discount, invoice.currency)}</>}
+                        {' = '}<span className="font-bold text-foreground">{formatMoney(item.total, invoice.currency)}</span>
+                      </>
+                    ) : (
+                      <span className="text-warning font-semibold">مبلغ این ردیف در تصویر خوانده نشد</span>
+                    )}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 mt-1.5">
                     <ConfidenceBar value={item.confidence} size="xs" />

@@ -157,16 +157,27 @@ export function findUnit(text: string): string | undefined {
  * کد کالا، واحد، نویسه‌های تحریف‌شده و واژه‌های تبلیغاتی.
  */
 export function cleanTitle(raw: string): string {
-  let title = norm(raw)
-    .replace(/[★☆•●▪◦※]/g, ' ')
+  const title = norm(raw)
+    // رقم چسبیده به واژه («۱۸۰۵۰۵فراگوشت») را جدا می‌کند تا کد حذف شود
+    .replace(/([0-9۰-۹]+)([\u0621-\u064A\u066E-\u06D3])/g, '$1 $2')
+    .replace(/([\u0621-\u064A\u066E-\u06D3])([0-9۰-۹]+)/g, '$1 $2')
+    .replace(/[★☆•●▪◦※\[\]{}«»"'`©®]/g, ' ')
     .replace(/(^|\s)(?:جشنواره|تخفیف ویژه|هدیه|امتیاز)(?=\s|$)/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  // حذف واژه‌های تک‌حرفی بی‌معنا در انتها (نویز OCR)
+
   const parts = title.split(' ').filter((word) => word.length > 0);
-  while (parts.length > 1 && parts[parts.length - 1].length === 1) parts.pop();
-  title = parts.join(' ').trim();
-  return title;
+  const persianWords = parts.filter((word) => /[\u0621-\u064A\u066E-\u06D3]{2,}/.test(word)).length;
+  const cleaned = parts.filter((word) => {
+    // رقم چسبیده (کد کالا یا مبلغی که OCR داخل عنوان انداخته)
+    if (/^[0-9۰-۹]{4,}$/.test(word)) return false;
+    // حرف تک‌حرفی: نویز
+    if (word.length === 1) return false;
+    // واژه لاتین بی‌معنا («Aleg»، «Gm»)، ولی «A4» کد کالاست و می‌ماند
+    if (persianWords >= 2 && /^[A-Za-z]{2,}$/.test(word)) return false;
+    return true;
+  });
+  return (cleaned.length ? cleaned : parts).join(' ').trim();
 }
 
 /** کد کالا/بارکد احتمالی در متن خط */

@@ -14,6 +14,7 @@
 import {
   amountsOf, plausible, readHeader, isHeaderLine, isMetaLine, summaryKind, assignRoles,
   containsPhrase, hasWord, repairValue, normalizeWord, normalizeKeyword,
+  amountDetails, persianRatio,
 } from './primitives';
 import type { Roles, SummaryKind, VendorHint } from './primitives';
 import {
@@ -130,23 +131,27 @@ export function classifyLines(
 
   const lines = raw
     .split(/\r?\n/)
-    .map((line) => line.replace(/\s+/g, ' ').trim())
+    // خط عمودی جدول در متن خام به‌جای فاصله نشسته است
+    .map((line) => line.replace(/[|¦]/g, ' ').replace(/\s+/g, ' ').trim())
     .filter((line) => line.length > 0);
 
   const classified = lines.map((text, index): LineAnalysis => {
-    const numbers = amountsOf(text);
+    const tokens = amountDetails(text);
+    const numbers = tokens.map((token) => token.value);
     const fine = numbers.filter(plausible);
+    const valid = tokens.filter((token) => plausible(token.value) && token.value >= 1000);
+    const repaired = valid.some((token) => token.repaired);
     const fields = readHeader(text);
     const wordsOnly = text
       .replace(/[0-9۰-۹٠-٩]+/g, ' ')
       .replace(/[^\u0600-\u06FFA-Za-z]/g, '')
       .trim();
+    const persianWords = (text.match(/[\u0621-\u064A\u066E-\u06D3]{2,}/g) ?? []).length;
+    const ratio = persianRatio(text);
     const product = hasProductWord(text);
-    const hasBigAmount = fine.some((n) => n >= 5000);
+    const hasBigAmount = valid.length > 0;
 
     // ۱) جمع‌بندی سند (قبل از هر چیز: خط جمع، هیچ‌وقت کالا نیست)
-    //    اگر خط مبلغ دارد، جمع‌بندی با اطمینان کامل تشخیص داده می‌شود؛
-    //    خط بی‌مبلغ فقط وقتی جمع‌بندی است که کوتاه باشد و نام کالا نداشته باشد.
     const wordCountAll = text.split(/\s+/).filter(Boolean).length;
     const allowNoAmountSummary = !product && wordCountAll <= 6 && !isHeaderLine(text, fields);
     const kind = summaryKind(text, true, extra)
@@ -158,17 +163,7 @@ export function classifyLines(
       };
     }
 
-    // ۲) خطوط شناسنامه‌ای: تلفن، کد اقتصادی، آدرس، نام فروشگاه
-    if (isMetaLine(text) || looksLikePlace(text)) {
-      return { index, text, role: 'meta', numbers, reason: 'اطلاعات شناسنامه‌ای (تلفن/آدرس/کد/فروشگاه)', confidence: 90 };
-    }
-
-    // ۳) متن تبلیغاتی و پانویس (واژه‌های قطعی مثل «جشنواره» مقدم بر واژه کالاست)
-    if (looksPromotional(text)) {
-      return { index, text, role: 'promo', numbers, reason: 'متن تبلیغاتی/جشنواره یا پانویس سند', confidence: 85 };
-    }
-
-    // ۴) سرستون جدول یا سرستون بلوک پرداخت
+    // ۲) سرستون جدول یا سرستون بلوک پرداخت (پیش از قاعده نویز، چون واژه لاتین دارد)
     if (isHeaderLine(text, fields) && !product) {
       return { index, text, role: 'header', numbers, reason: 'دو یا چند عنوان ستون دارد و عدد ندارد', confidence: 92 };
     }
@@ -176,45 +171,93 @@ export function classifyLines(
       return { index, text, role: 'header', numbers, reason: 'سرستون بلوک پرداخت است، نه کالا', confidence: 88 };
     }
 
-    // ۵) خط دارای مبلغ: ردیف اعداد کالا
-    if (hasBigAmount) {
+    // ۳) خطوط شناسنامه‌ای: تلفن، کد اقتصادی، آدرس، نام فروشگاه
+    if (isMetaLine(text) || looksLikePlace(text)) {
+      return { index, text, role: 'meta', numbers, reason: 'اطلاعات شناسنامه‌ای (تلفن/آدرس/کد/فروشگاه)', confidence: 90 };
+    }
+
+    // ۴) متن تبلیغاتی و پانویس
+    if (looksPromotional(text)) {
+      return { index, text, role: 'promo', numbers, reason: 'متن تبلیغاتی/جشنواره یا پانویس سند', confidence: 85 };
+    }
+
+    // ۵) آشغال اسکن: خطی که حروفش بیشتر لاتین است و مبلغ هم ندارد
+    if (ratio < 0.35 && persianWords < 2 && !hasBigAmount) {
+      return { index, text, role: 'noise', numbers, reason: 'خط لاتین بی‌معنا (نویز اسکن)', confidence: 25 };
+    }
+
+    // ۶) خط دارای دو مبلغ یا بیشتر: ردیف اعداد کالا
+    if (valid.length >= 2) {
       return {
         index, text, role: 'numbers', numbers,
-        reason: fine.length >= 2
-          ? `${fine.length} عدد با مبلغ در یک خط: ردیف اعداد یک کالا`
-          : 'تنها یک مبلغ در خط: ردیف کالای تک‌ستونه',
-        confidence: fine.length >= 2 ? 88 : 70,
+        reason: repaired
+          ? `${valid.length} مبلغ در خط بود؛ ارقام مخدوش با جدول نویسه‌های مشابه بازیابی شد`
+          : `${valid.length} عدد با مبلغ در یک خط: ردیف اعداد یک کالا`,
+        confidence: repaired ? 62 : 88,
       };
     }
 
-    // ۶) عدد غول‌آسا و بی‌معنا: نویز اسکن
+    // ۷) یک مبلغ در خط: اگر واژه‌های کالا هم دارد، عددش کد است نه مبلغ
+    if (valid.length === 1) {
+      // خطی که واژه سرستون دارد (تعداد/قیمت/مبلغ) ردیف مقدار است، نه عنوان
+      if (persianWords >= 2 && fields.length === 0) {
+        return {
+          index, text, role: 'title', numbers,
+          reason: 'خط عنوان کالا با یک عدد چسبیده (کد کالا)، نه ردیف مبلغ',
+          confidence: product ? 84 : 66,
+        };
+      }
+      return {
+        index, text, role: 'numbers', numbers,
+        reason: repaired ? 'تنها یک مبلغ مخدوش در خط: ردیف کالای تک‌ستونه' : 'تنها یک مبلغ در خط: ردیف کالای تک‌ستونه',
+        confidence: repaired ? 45 : 70,
+      };
+    }
+
+    // ۸) عدد غول‌آسا و بی‌معنا: نویز اسکن
     if (numbers.length && !fine.length && wordsOnly.length < 6) {
       return { index, text, role: 'noise', numbers, reason: 'عدد خارج از بازه مبلغ: نویز اسکن', confidence: 30 };
     }
 
-    // ۷) خطی که فقط یک عدد کوچک است: تعداد ردیف بعد
+    // ۹) خطی که فقط یک عدد کوچک است: تعداد ردیف بعد
     if (numbers.length === 1 && numbers[0] > 0 && numbers[0] < 1000 && wordsOnly.length < 3) {
       return { index, text, role: 'qty', numbers, reason: 'تنها یک عدد کوچک: تعداد ردیف بعدی', confidence: 60 };
     }
 
-    // ۸) خط متنی: عنوان کالا
-    if (wordsOnly.length >= 3) {
-      const wordCount = wordsOnly.split(/\s+/).filter((w) => w.length > 1).length;
+    // ۱۰) خط متنی با واژه‌های فارسی: عنوان کالا
+    const hasPersianWord = /[\u0621-\u064A\u066E-\u06D3]{3,}/.test(text);
+    const codeToken = /(^|\s)[A-Za-z]{1,3}\d{1,4}(\s|$)/.test(text);   // مثل «A4»
+    if ((persianWords >= 2 || product || (persianWords >= 1 && codeToken && hasPersianWord))
+      && wordsOnly.length >= 3) {
       return {
         index, text, role: 'title', numbers,
         reason: product
           ? 'نام کالا با واژه شناخته‌شده صنف'
-          : wordCount >= 2 ? 'خط متنی بعد از/قبل از ردیف اعداد: نام کالا' : 'خط متنی کوتاه: نام کالا',
-        confidence: product ? 90 : wordCount >= 2 ? 72 : 55,
+          : persianWords >= 2 ? 'خط متنی فارسی: نام کالا' : 'خط متنی کوتاه: نام کالا',
+        confidence: product ? 90 : persianWords >= 2 ? 72 : 55,
       };
     }
 
-    // ۹) هر چیز دیگر: نویز
+    // ۱۱) هر چیز دیگر: نویز
     return { index, text, role: 'noise', numbers, reason: 'خط بی‌معنا یا نویز اسکن', confidence: 20 };
   });
 
+  // اصلاح ساختاری: عنوان کالا فقط بین سرستون جدول و جمع‌بندی سند معنا دارد
+  const headerIndex = classified.findIndex((line) => line.role === 'header');
+  const summaryIndex = classified.findIndex((line) => line.role === 'summary');
+  const structured = classified.map((line) => {
+    if (line.role !== 'title' || hasProductWord(line.text)) return line;
+    if (headerIndex >= 0 && line.index < headerIndex) {
+      return { ...line, role: 'noise' as LineRole, reason: 'پیش از سرستون جدول است (سربرگ فروشگاه)، نه کالا', confidence: 30 };
+    }
+    if (summaryIndex >= 0 && line.index > summaryIndex) {
+      return { ...line, role: 'promo' as LineRole, reason: 'پس از جمع‌بندی سند آمده است (پانویس)، نه کالا', confidence: 40 };
+    }
+    return line;
+  });
+
   // نقش‌هایی که کاربر دستی عوض کرده، بر تصمیم ماشین مقدم‌اند و دلیلشان هم عوض می‌شود
-  return classified.map((line) => (
+  return structured.map((line) => (
     overrides[line.index]
       ? { ...line, role: overrides[line.index], reason: 'نقش این خط را خودتان تعیین کرده‌اید', confidence: 100 }
       : line
@@ -269,13 +312,24 @@ export function detectItems(
   const totals: ItemAnalysis['totals'] = {};
   for (const line of lines) {
     if (line.role !== 'summary' || !line.summaryKind) continue;
-    const value = line.numbers.filter(plausible).find((n) => n >= 1000) ?? line.numbers.filter(plausible)[0];
+    // مبلغ جمع‌بندی باید سالم خوانده شده باشد؛ عدد بازسازی‌شده از نویسه مخدوش، مبلغ سند نیست
+    const clean = amountDetails(line.text)
+      .filter((token) => !token.repaired && plausible(token.value) && token.value >= 1000)
+      .map((token) => token.value)
+      .sort((a, b) => b - a);
+    const value = clean[0];
     if (value === undefined) continue;
     const key = SUMMARY_TO_TOTAL[line.summaryKind];
     if (totals[key] === undefined) totals[key] = value;
     else if (totals[key] !== value && Math.abs(totals[key] - value) / Math.max(value, 1) > 0.01) {
       warnings.push(`«${line.text.slice(0, 34)}» دو بار با دو عدد مختلف خوانده شد؛ مقدار اول در نظر گرفته شد.`);
     }
+  }
+
+  // تخفیفِ تنها و بدون هیچ جمع دیگری قابل اعتماد نیست
+  if (totals.discount && !totals.payable && !totals.preDiscount) {
+    warnings.push('خط تخفیف بدون مبلغ نهایی سند خوانده شد و کنار گذاشته شد.');
+    delete totals.discount;
   }
 
   /* ------------------------------------------------ ساخت ردیف‌ها از بلوک‌ها */
@@ -306,8 +360,17 @@ export function detectItems(
       continue;
     }
     if (line.role === 'title') {
-      const canAppend = current && (current.titleLines.length === 0 || lastRole === 'title');
-      if (!canAppend) current = newBlock();
+      // خط دوم عنوان فقط وقتی به خط اول می‌چسبد که ادامه واقعی باشد:
+      // کوتاه باشد، مبلغ نداشته باشد و خط قبلی هم یک عنوان کامل نباشد
+      const previous = current && current.titleLines.length > 0 ? current : null;
+      const continuation = Boolean(
+        previous
+        && lastRole === 'title'
+        && previous.titleLines.length < 2
+        && previous.titleWords.join(' ').split(' ').length <= 5
+        && line.numbers.filter((n) => n >= 1000).length === 0,
+      );
+      if (!continuation) current = newBlock();
       current!.titleLines.push(line.index);
       current!.titleWords.push(line.text);
       lastRole = 'title';
@@ -317,12 +380,48 @@ export function detectItems(
     lastRole = line.role;
   }
 
+  // خطوطی که ارقامشان با جدول نویسه‌های مشابه بازیابی شده‌اند
+  const numberRepaired = new Map<number, boolean>();
+  for (const line of lines) {
+    if (line.role !== 'numbers') continue;
+    const values = amountDetails(line.text).filter((token) => token.value >= 1000);
+    numberRepaired.set(line.index, values.some((token) => token.repaired));
+  }
+
+  // اگر سند هیچ نشانه‌ای از جدول یا جمع‌بندی ندارد، متن یک نامه است نه فاکتور
+  const hasTableSignals = lines.some((line) => ['numbers', 'header', 'summary'].includes(line.role));
+
   const items: DetectedItem[] = [];
   for (const block of blocks) {
     const numbersLine = block.numbersLine;
-    if (!numbersLine) continue;
     const titleRaw = block.titleWords.join(' ');
     const title = cleanTitle(titleRaw);
+
+    // ردیف بدون مبلغ: نام کالا درست خوانده شده ولی رقم‌هایش ناخوانا بوده‌اند
+    if (!numbersLine) {
+      if (!title || title.length < 3 || !hasTableSignals) continue;
+      const repairedNote = 'مبلغ این ردیف در متن ناخوانا بود؛ قیمت را دستی وارد کنید.';
+      items.push({
+        title,
+        titleRaw,
+        quantity: 1,
+        unitPrice: 0,
+        discount: 0,
+        total: 0,
+        category: guessCategory(title),
+        unit: findUnit(titleRaw),
+        confidence: 48,
+        needsReview: true,
+        note: repairedNote,
+        sourceLines: [...block.titleLines],
+        alternatives: [],
+        reasons: [
+          `عنوان از ${block.titleLines.length} خط متنی ساخته شد`,
+          'ردیف اعداد این کالا خوانده نشد (ارقام مخدوش)',
+        ],
+      });
+      continue;
+    }
 
     if (!title) {
       // ردیف عدد بدون هیچ عنوان: اگر مبلغش در مقیاس قلم قبلی باشد، ادامه همان قلم است
@@ -345,6 +444,33 @@ export function detectItems(
     }
 
     const fine = numbersLine.numbers.filter(plausible);
+    const repairedTokens = amountDetails(numbersLine.text).filter((token) => token.value >= 1000);
+    const repairedCount = repairedTokens.filter((token) => token.repaired).length;
+    // اگر بیشتر مبلغ‌های ردیف از نویسه‌های مخدوش بازیابی شده‌اند، عدد قابل اعتماد نیست
+    const untrusted = repairedCount > 0 && repairedCount * 2 >= repairedTokens.length;
+    if (untrusted) {
+      items.push({
+        title,
+        titleRaw,
+        quantity: 1,
+        unitPrice: 0,
+        discount: 0,
+        total: 0,
+        category: guessCategory(title),
+        unit: findUnit(titleRaw),
+        confidence: 52,
+        needsReview: true,
+        note: 'مبلغ این ردیف در تصویر مخدوش بود و بازسازی‌اش قابل اعتماد نیست؛ دستی وارد کنید.',
+        sourceLines: [...block.titleLines, numbersLine.index],
+        alternatives: [],
+        reasons: [
+          `عنوان از ${block.titleLines.length} خط متنی ساخته شد`,
+          'ارقام ردیف بیشتر با نویسه‌های شبیه رقم بازسازی شده بودند',
+        ],
+      });
+      continue;
+    }
+
     const roles = assignRoles(fine, headerFields);
     let quantity = roles.qty ?? block.qtyLine?.numbers[0] ?? 1;
     if (!Number.isFinite(quantity) || quantity <= 0) quantity = 1;
@@ -353,6 +479,7 @@ export function detectItems(
     let unitPrice = roles.unitPrice ?? 0;
     let total = roles.total ?? 0;
 
+    const repairedNumbers = numberRepaired.get(numbersLine.index) ?? false;
     const reasons: string[] = [
       `عنوان از ${block.titleLines.length} خط متنی ساخته شد`,
       `نقش اعداد از ${headerFields.length ? 'سرستون‌های سند' : 'معادله ردیف'} تعیین شد`,
@@ -385,6 +512,12 @@ export function detectItems(
           reasons.push('مبلغ چاپ‌شده با معادله ردیف نمی‌خواند: نیازمند بازبینی');
         }
       }
+    }
+
+    if (repairedNumbers) {
+      needsReview = true;
+      note = [note, 'ارقام مبلغ این ردیف در تصویر مخدوش بود؛ مقدار بازیابی‌شده را بازبینی کنید.'].filter(Boolean).join(' ');
+      reasons.push('مبلغ از نویسه‌های مخدوش بازیابی شد');
     }
 
     if (discount > unitPrice * quantity) {
@@ -466,6 +599,8 @@ export function detectItems(
   if (junkTitles.length) warnings.push(`${junkTitles.length} قلم عنوان کوتاه و مشکوک دارد.`);
   if (!items.length) {
     warnings.push('هیچ ردیف کالایی در متن پیدا نشد؛ اگر فاکتور جدول دارد، تصویر را کامل‌تر و صاف‌تر بگیرید.');
+  } else if (!items.some((item) => item.unitPrice > 0 || item.total > 0)) {
+    warnings.push('نام کالاها خوانده شد ولی هیچ مبلغی سالم نبود (ارقام در تصویر مخدوش‌اند)؛ قیمت‌ها را دستی وارد کنید یا از تصویر واضح‌تری استفاده کنید.');
   }
 
   const averageConfidence = items.length
