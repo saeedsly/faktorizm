@@ -171,6 +171,21 @@ MySQL و درایور حافظه جابه‌جا می‌شوید؛ هر دو د�
 
 جزئیات، متغیرهای کالیبراسیون و راهنمای عکس‌برداری: [`ocr-service/ENGINES.md`](ocr-service/ENGINES.md)
 
+## اجرای آزمایشی کامل (وب + API + OCR)
+
+سه فرمان در سه ترمینال، به همین ترتیب:
+
+```bash
+node server/src/index.js                       # API روی 8787 (درایور حافظه)
+python ocr-service/service.py                  # موتور OCR روی 8789 (آفلاین)
+npm run dev                                    # رابط کاربری روی 5173
+```
+
+برای آزمون خوانش، نمونه‌های آماده در `public/samples/` هست:
+`factorin-clean.png` (اسکن تمیز)، `factorin-photo.jpg` (عکس با کیفیت متوسط) و
+`factorin-lowres.jpg` (عکس کم‌کیفیت که باید «بازبینی اختیاری» یا «قابل تأیید
+نیست» بگیرد).
+
 ## تست‌ها
 
 ```bash
