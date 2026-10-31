@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react';
-import { RefreshCcw, House, ShieldAlert, TriangleAlert } from 'lucide-react';
+import { RefreshCcw, House, ShieldAlert, TriangleAlert, ClipboardCheck, Wrench } from 'lucide-react';
 import { clearTokens } from '@/lib/api/client';
+import { db, DEFAULT_SETTINGS } from '@/lib/db';
 
 interface Props { children: ReactNode; compact?: boolean }
 interface State { hasError: boolean; message: string }
@@ -26,6 +27,31 @@ export default class ErrorBoundary extends Component<Props, State> {
   private goLogin = () => {
     clearTokens();
     window.location.assign('/auth/login');
+  };
+
+  /** متن فنی خطا برای فرستادن به پشتیبانی */
+  private copyDetail = async () => {
+    const text = `${this.state.message}\n${navigator.userAgent}\n${new Date().toISOString()}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      this.setState({ message: `${this.state.message}\n\n(کپی شد)` });
+    } catch {
+      /* دسترسی کلیپ‌بورد نبود؛ متن همان‌جا دیده می‌شود */
+    }
+  };
+
+  /**
+   * تعمیر تنظیمات: فاکتورها و مشتری‌ها دست نمی‌خورند؛ فقط رکورد تنظیمات به
+   * مقادیر پیش‌فرضِ سالم برمی‌گردد. این همان چیزی است که بیشتر خطاهای
+   * «خواندن مقدار undefined» را ریشه‌کن می‌کند (تنظیماتِ نسخهٔ قدیمی).
+   */
+  private repairSettings = async () => {
+    try {
+      await db.settings.put({ ...DEFAULT_SETTINGS });
+      window.location.reload();
+    } catch {
+      window.location.assign('/');
+    }
   };
 
   private messageBox() {
@@ -66,11 +92,23 @@ export default class ErrorBoundary extends Component<Props, State> {
               className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl gradient-brand text-white text-sm font-bold">
               <RefreshCcw size={17} /> تازه‌سازی صفحه
             </button>
+            <button onClick={() => void this.repairSettings()}
+              className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl border border-border text-sm font-bold hover:bg-muted transition">
+              <Wrench size={17} /> تعمیر تنظیمات
+            </button>
+            <button onClick={() => void this.copyDetail()}
+              className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl border border-border text-sm font-bold hover:bg-muted transition">
+              <ClipboardCheck size={17} /> کپی متن خطا
+            </button>
             <button onClick={this.goLogin}
               className="inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl border border-border text-sm font-bold hover:bg-muted transition">
               <House size={17} /> بازگشت به ورود
             </button>
           </div>
+          <p className="mt-4 text-[11px] text-muted-foreground leading-6">
+            «تعمیر تنظیمات» فقط تنظیمات را به حالت پیش‌فرض برمی‌گرداند؛ فاکتورها، مشتری‌ها و کالاها
+            دست نمی‌خورند. اگر خطا تکرار شد، متن فنی را کپی و برای پشتیبانی بفرستید.
+          </p>
         </div>
       </div>
     );

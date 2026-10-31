@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { parseIranAmount } from './numbers';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -25,16 +26,14 @@ export function toFaDigits(input: string | number): string {
   return String(input).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]);
 }
 
-/** استخراج عدد از متن آلوده (حذف ممیز/جداگر/حروف) */
+/**
+ * استخراج عدد از متن آلوده — از موتور اعداد ایرانی استفاده می‌کند
+ * (ارقام فارسی/عربی، جداکنندهٔ هزارگان، ممیز، پرانتز منفی، پسوند ریال/تومان،
+ * «۲.۵ میلیون» و عددِ نوشتاری). در نبود عدد معتبر ۰ برمی‌گردد.
+ */
 export function parseNumber(input: string | number | null | undefined): number {
-  if (typeof input === 'number') return input;
-  if (!input) return 0;
-  const latin = toLatinDigits(input)
-    .replace(/[٬,،]/g, '')
-    .replace(/[^0-9.\-]/g, '');
-  if (!latin) return 0;
-  const n = Number.parseFloat(latin);
-  return Number.isFinite(n) ? n : 0;
+  const value = parseIranAmount(input);
+  return value === null ? 0 : value;
 }
 
 /** قالب‌بندی مبلغ با جداگر هزارگان و ارقام فارسی */

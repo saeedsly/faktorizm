@@ -81,14 +81,42 @@ export const DEFAULT_SETTINGS: AppSettings = {
   seeded: false,
 };
 
+/** شناسه‌های معتبر موتور ابری — برای پاک‌سازی داده‌های ذخیره‌شدهٔ نسخه‌های قدیمی */
+const KNOWN_PROVIDERS = ['gemini', 'openrouter', 'github', 'groq', 'mistral', 'ollama', 'custom', 'openai'];
+const KNOWN_ENGINES = ['local', 'ai', 'hybrid'];
+
+/**
+ * تنظیمات ذخیره‌شده ممکن است از نسخهٔ قدیمی برنامه باشد: فیلد تازه‌ای نداشته
+ * باشد یا شناسهٔ حذف‌شده‌ای مثل موتور ابری قدیمی در آن مانده باشد. بدون این
+ * پاک‌سازی، اولین دسترسی به `PROVIDERS[settings.aiProvider]` خطا می‌دهد و
+ * صفحه سفید می‌شود.
+ */
+export function normalizeSettings(raw?: Partial<AppSettings> | null): AppSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...(raw ?? {}), id: 'singleton' as const };
+  if (!KNOWN_PROVIDERS.includes(merged.aiProvider)) merged.aiProvider = DEFAULT_SETTINGS.aiProvider;
+  if (!KNOWN_ENGINES.includes(merged.ocrEngine)) merged.ocrEngine = DEFAULT_SETTINGS.ocrEngine;
+  const threshold = Number(merged.autoApproveThreshold);
+  merged.autoApproveThreshold = Number.isFinite(threshold) ? Math.min(100, Math.max(0, threshold)) : 85;
+  const tax = Number(merged.defaultTaxRate);
+  merged.defaultTaxRate = Number.isFinite(tax) ? Math.min(100, Math.max(0, tax)) : 10;
+  if (merged.theme !== 'light' && merged.theme !== 'dark') merged.theme = DEFAULT_SETTINGS.theme;
+  if (!['IRR', 'IRT'].includes(merged.currency)) merged.currency = DEFAULT_SETTINGS.currency;
+  return merged;
+}
+
 export async function getSettings(): Promise<AppSettings> {
-  const s = await db.settings.get('singleton');
-  return s ?? { ...DEFAULT_SETTINGS };
+  const stored = await db.settings.get('singleton');
+  const settings = normalizeSettings(stored);
+  // پاک‌سازی یک‌بارهٔ رکورد قدیمی تا دفعهٔ بعد چیزی برای ترمیم نماند
+  if (stored && JSON.stringify(stored) !== JSON.stringify(settings)) {
+    await db.settings.put(settings);
+  }
+  return settings;
 }
 
 export async function saveSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = await getSettings();
-  const next = { ...current, ...patch, id: 'singleton' as const };
+  const next = normalizeSettings({ ...current, ...patch });
   await db.settings.put(next);
   return next;
 }

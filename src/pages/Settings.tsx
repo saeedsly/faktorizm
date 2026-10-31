@@ -14,7 +14,7 @@ import { logActivity } from '@/lib/activity';
 import { toFaDigits } from '@/lib/utils';
 import { checkServerOcr } from '@/lib/ocr/serverEngine';
 import { AI_PROVIDERS, testAiConnection } from '@/lib/ocr/aiEngine';
-import { PROVIDERS, FREE_BADGE, FREE_FIRST, keysOf } from '@/lib/ocr/providers';
+import { FREE_BADGE, FREE_FIRST, keysOf, providerInfo } from '@/lib/ocr/providers';
 import type { ProviderId } from '@/lib/ocr/providers';
 import { ExternalLink, KeyRound, CheckCircle2, CloudCog, BookOpen } from 'lucide-react';
 
@@ -186,7 +186,7 @@ export default function SettingsPage() {
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {FREE_FIRST.map((id: ProviderId) => {
-                    const info = PROVIDERS[id];
+                    const info = providerInfo(id);
                     const badge = FREE_BADGE[info.free];
                     const active = s.aiProvider === id;
                     return (
@@ -215,17 +215,17 @@ export default function SettingsPage() {
                       dir="ltr"
                       list="ai-model-list"
                       value={s.aiModel}
-                      placeholder={PROVIDERS[s.aiProvider].defaultModel || 'نام مدل'}
+                      placeholder={providerInfo(s.aiProvider).defaultModel || 'نام مدل'}
                       onChange={(e) => set({ aiModel: e.target.value })}
                     />
                     <datalist id="ai-model-list">
-                      {PROVIDERS[s.aiProvider].models.map((model) => (
+                      {providerInfo(s.aiProvider).models.map((model) => (
                         <option key={model.id} value={model.id}>{model.label}</option>
                       ))}
                     </datalist>
-                    {PROVIDERS[s.aiProvider].models.some((model) => model.best) && (
+                    {providerInfo(s.aiProvider).models.some((model) => model.best) && (
                       <p className="mt-1 text-[10px] text-muted-foreground">
-                        پیشنهاد: <span dir="ltr">{PROVIDERS[s.aiProvider].models.find((model) => model.best)!.id}</span>
+                        پیشنهاد: <span dir="ltr">{providerInfo(s.aiProvider).models.find((model) => model.best)!.id}</span>
                       </p>
                     )}
                   </div>
@@ -234,7 +234,7 @@ export default function SettingsPage() {
                     <Input
                       dir="ltr"
                       value={s.aiBaseUrl}
-                      placeholder={PROVIDERS[s.aiProvider].baseUrl || 'https://…/v1'}
+                      placeholder={providerInfo(s.aiProvider).baseUrl || 'https://…/v1'}
                       onChange={(e) => set({ aiBaseUrl: e.target.value.trim() })}
                     />
                     <p className="mt-1 text-[10px] text-muted-foreground">
@@ -243,7 +243,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {!PROVIDERS[s.aiProvider].keyless && (
+                {!providerInfo(s.aiProvider).keyless && (
                   <div>
                     <Label>کلیدهای API (هر خط یک کلید)</Label>
                     <textarea
@@ -266,15 +266,15 @@ export default function SettingsPage() {
                 <div className="rounded-xl bg-muted/70 p-3">
                   <p className="text-[11px] font-bold mb-1.5 flex items-center gap-1.5">
                     <KeyRound size={12} className="text-primary" />
-                    گرفتن کلید رایگان از {PROVIDERS[s.aiProvider].label}
+                    گرفتن کلید رایگان از {providerInfo(s.aiProvider).label}
                   </p>
                   <ol className="text-[11px] leading-6 text-muted-foreground list-decimal pr-4 space-y-0.5">
-                    {PROVIDERS[s.aiProvider].keySteps.map((step) => <li key={step}>{step}</li>)}
+                    {providerInfo(s.aiProvider).keySteps.map((step) => <li key={step}>{step}</li>)}
                   </ol>
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    {PROVIDERS[s.aiProvider].keyUrl && (
+                    {providerInfo(s.aiProvider).keyUrl && (
                       <a
-                        href={PROVIDERS[s.aiProvider].keyUrl}
+                        href={providerInfo(s.aiProvider).keyUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
@@ -313,7 +313,7 @@ export default function SettingsPage() {
                       model: s.aiModel,
                     });
                     setAiState(res.ok ? 'ok' : 'fail');
-                    if (res.ok) toast.success(`اتصال به ${PROVIDERS[s.aiProvider].label} برقرار است`);
+                    if (res.ok) toast.success(`اتصال به ${providerInfo(s.aiProvider).label} برقرار است`);
                     else toast.error(`اتصال برقرار نشد: ${res.error ?? 'خطای نامشخص'}`);
                   }}
                 >

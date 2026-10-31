@@ -225,7 +225,7 @@ VOCAB = [
     'پارس', 'آرین', 'ایران', 'تهران', 'اصفهان', 'شیراز', 'مشهد', 'تبریز',
 ]
 
-# واژه‌نامهٔ مشترک (حروف هم‌شکل، ارقام و ۴۶۵ واژهٔ فاکتوری) از پیمانهٔ
+# واژه‌نامهٔ مشترک (~۵۰۰۰ واژهٔ فاکتوری، کالا، شهر و نام) از پیمانهٔ
 # persian_dict می‌آید؛ VOCAB بالا فقط واژه‌های خاص این فایل را نگه می‌دارد.
 if persian_dict is not None:
     VOCAB = sorted(set(VOCAB) | set(persian_dict.WORDS))
@@ -295,11 +295,20 @@ def fix_words(text):
 
 
 def _word_score(text):
-    """امتیاز واژه‌های شناخته‌شده؛ برای تشخیص جهت درست خط استفاده می‌شود."""
+    """
+    امتیاز واژه‌های شناخته‌شده؛ برای تشخیص جهت درست خط استفاده می‌شود.
+
+    واژهٔ ناشناسِ نزدیک به واژه‌نامه نیم‌امتیاز می‌گیرد. این سنجش برای هر خط
+    اجرا می‌شود، پس با ایندکس سبدیِ `persian_dict` انجام می‌شود تا هزاران بار
+    پیمایش کل واژه‌نامه لازم نشود.
+    """
     score = 0
     for word in re.findall(r'[\u0600-\u06FF]{2,}', text):
         if word in _INDEX:
             score += 2
+        elif persian_dict is not None:
+            if len(word) >= 4 and persian_dict.correct_token(word, allow_split=False) != word:
+                score += 1
         elif len(word) >= 4 and any(
             abs(len(candidate) - len(word)) <= 1 and _edit_distance_at_most_one(word, candidate)
             for candidate in _INDEX

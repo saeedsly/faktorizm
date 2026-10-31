@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { AI_PROVIDERS, keysOf } from '@/lib/ocr/aiEngine';
-import { PROVIDERS, FREE_BADGE } from '@/lib/ocr/providers';
+import { providerInfo, FREE_BADGE } from '@/lib/ocr/providers';
 import PageHeader from '@/components/PageHeader';
 import CameraCapture from '@/components/CameraCapture';
 import { Button, Card, CardTitle, EmptyState, Tabs, Badge, Select, Input, Label } from '@/components/ui/primitives';
@@ -190,22 +190,22 @@ export default function Scan() {
                     {settings.ocrEngine === 'local'
                       ? 'همه‌چیز روی همین دستگاه پردازش می‌شود؛ ارقام مخدوش و فاکتورهای شلوغ ممکن است دقیق خوانده نشوند.'
                       : settings.ocrEngine === 'ai'
-                        ? `${PROVIDERS[settings.aiProvider]?.label ?? 'سرویس ابری'} · مدل ${settings.aiModel || PROVIDERS[settings.aiProvider]?.defaultModel} — خوانش مستقیم تصویر بدون OCR محلی.`
+                        ? `${providerInfo(settings.aiProvider).label ?? 'سرویس ابری'} · مدل ${settings.aiModel || providerInfo(settings.aiProvider).defaultModel} — خوانش مستقیم تصویر بدون OCR محلی.`
                         : 'خوانش محلی و ابری هم‌زمان اجرا می‌شوند و بهترین مقدار هر فیلد انتخاب می‌شود.'}
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {settings.ocrEngine !== 'local' && (
-                  <span className={`chip !text-[10px] ${FREE_BADGE[PROVIDERS[settings.aiProvider].free].tone}`}>
-                    {FREE_BADGE[PROVIDERS[settings.aiProvider].free].label}
+                  <span className={`chip !text-[10px] ${FREE_BADGE[providerInfo(settings.aiProvider).free].tone}`}>
+                    {FREE_BADGE[providerInfo(settings.aiProvider).free].label}
                   </span>
                 )}
                 {settings.ocrEngine !== 'ai' && (
                   <Button size="sm" onClick={() => {
                     void update({ ocrEngine: 'ai' });
                     toast.success('حالت ابری فعال شد', {
-                      description: keysOf(settings).length || PROVIDERS[settings.aiProvider].keyless
+                      description: keysOf(settings).length || providerInfo(settings.aiProvider).keyless
                         ? 'اسناد بعدی مستقیم با مدل بینایی خوانده می‌شوند.'
                         : 'برای شروع، کلید رایگان را در تنظیمات بگذارید (ثبت‌نام بدون کارت بانکی).',
                     });
@@ -223,12 +223,12 @@ export default function Scan() {
                 </Button>
               </div>
             </div>
-            {settings.ocrEngine !== 'local' && !keysOf(settings).length && !PROVIDERS[settings.aiProvider].keyless && (
+            {settings.ocrEngine !== 'local' && !keysOf(settings).length && !providerInfo(settings.aiProvider).keyless && (
               <div className="mt-3 rounded-xl bg-warning-soft px-3 py-2 text-[11px] leading-5 text-warning flex items-start gap-1.5">
                 <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                 <span>
                   کلید API وارد نشده است؛ تا وقتی کلید نگذارید سندها با موتور محلی خوانده می‌شوند.
-                  {' '}کلید {PROVIDERS[settings.aiProvider].label} رایگان است و با ثبت‌نام بدون کارت بانکی ساخته می‌شود.
+                  {' '}کلید {providerInfo(settings.aiProvider).label} رایگان است و با ثبت‌نام بدون کارت بانکی ساخته می‌شود.
                   {' '}
                   <button onClick={() => navigate('/settings')} className="font-bold underline">وارد کردن کلید در تنظیمات</button>
                 </span>

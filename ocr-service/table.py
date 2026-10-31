@@ -64,9 +64,20 @@ _DIGITS_RE = re.compile(r'[0-9۰-۹٠-٩]')
 
 
 def parse_number(text):
-    """نخستین عدد موجود در متن خانه؛ دو عدد جدا را به هم نمی‌چسباند."""
+    """
+    نخستین عدد موجود در متن خانه؛ دو عدد جدا را به هم نمی‌چسباند.
+
+    اگر `persian_dict` در دسترس باشد، موتور اعداد کاملِ آن استفاده می‌شود:
+    ارقام فارسی/عربی/لاتین، جداکنندهٔ هزارگان (٬ ، , فاصله)، ممیز (٫ .)،
+    علامت منفی پرانتزی، پسوند ریال/تومان، ضریب نوشتاری (میلیون/میلیارد) و
+    عددِ نوشتاری («دو میلیون و پانصد هزار»).
+    """
     if text is None:
         return None
+    if persian_dict is not None:
+        value = persian_dict.parse_amount(text)
+        if value is not None:
+            return value
     cleaned = str(text).translate(FA_DIGITS).replace('٫', '.')
     if persian_dict is not None:
         # «1O5» و «S0» در فونت چاپی رقم‌اند، نه حرف
@@ -333,7 +344,11 @@ _RATE = re.compile(r'(\d{1,2})\s*[٪%]|[٪%]\s*[)\]}]?\s*\(?\s*(\d{1,2})')
 
 
 def _tax_rate(text):
-    """نرخ مالیات از متنی مثل «مالیات بر ارزش افزوده (۹٪)»."""
+    """نرخ مالیات از متنی مثل «مالیات بر ارزش افزوده (۹٪)»، «(%9)»، «۹ درصد»."""
+    if persian_dict is not None:
+        rate = persian_dict.parse_percent(text)
+        if rate is not None:
+            return rate
     match = _RATE.search(text or '')
     if not match:
         return None

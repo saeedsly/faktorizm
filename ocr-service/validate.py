@@ -24,6 +24,11 @@ import os
 import re
 
 try:
+    import iran_numbers
+except ImportError:  # pragma: no cover
+    iran_numbers = None
+
+try:
     import persian_dict
 except ImportError:  # pragma: no cover
     persian_dict = None
@@ -66,9 +71,17 @@ def clean_number(text):
     """
     whitelist عدد: هر چیزی جز ارقام و . / - حذف می‌شود و O/B/S به رقم اصلاح
     می‌شود. جداکنندهٔ هزارگان فارسی (٬) و کاما حذف می‌شوند.
+
+    اگر واژه‌نامه در دسترس باشد، اول موتور اعداد کاملِ آن امتحان می‌شود تا
+    شکل‌های خاص (پرانتز منفی، پسوند تومان، «۲.۵ میلیون»، «دو میلیون و…»)
+    از دست نروند؛ وگرنه همان whitelist سختِ قبلی جواب می‌دهد.
     """
     if text is None:
         return None
+    if persian_dict is not None:
+        direct = persian_dict.parse_amount(text)
+        if direct is not None:
+            return str(direct)
     raw = str(text).replace('\u066c', '').replace('\u060c', '').replace(',', '')
     raw = raw.replace('\u200c', '').replace(' ', '')
     raw = to_latin_digits(raw)
@@ -282,6 +295,32 @@ def validate(result):
                 totals['total'] = expected_total
                 flags.append('total_derived')
                 notes.append('جمع کل خوانده نشد؛ از جمع اقلام و مالیات محاسبه شد.')
+
+    # ------------------------------------------- شماره‌های هویتی برچسب‌دار
+    # «کد ملی ۰۰۱۲۳۴۵۶۷۸» یا «شبا IR…» اگر رقم کنترل نخواند، یعنی موتور یک
+    # رقم را اشتباه خوانده؛ این را هشدار می‌دهیم تا کاربر عدد را اصلاح کند.
+    if iran_numbers is not None:
+        for line in result.get('lines') or []:
+            for found in iran_numbers.find_identifiers(line.get('text', '')):
+                kind = found['kind']
+                expected = iran_numbers.expected_length(kind)
+                length = len(iran_numbers._digits(found['value']))
+                if found['ok'] or (expected and length != expected):
+                    continue
+                flag = f"invalid_{kind}"
+                if flag in flags:
+                    continue
+                flags.append(flag)
+                label = iran_numbers.LABELS.get(kind, kind)
+                notes.append(
+                    f'{label} خوانده‌شده ({found["value"]}) با رقم کنترل نمی‌خواند؛ '
+                    'یک رقم آن احتمالاً اشتباه خوانده شده است.'
+                )
+
+    if 'invalid_national_id' in flags or 'invalid_legal_id' in flags \
+            or 'invalid_economic_code' in flags or 'invalid_iban' in flags:
+        if status == 'ok':
+            status = 'review'
 
     if 'item_mismatch' in flags:
         notes.append('در برخی ردیف‌ها تعداد × قیمت واحد با مبلغ ردیف نمی‌خواند؛ '

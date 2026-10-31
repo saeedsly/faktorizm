@@ -25,9 +25,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarCollapsed: false,
 
   load: async () => {
-    const s = await getSettings();
-    applyThemeClass(s.theme);
-    set({ settings: s, loaded: true });
+    try {
+      const s = await getSettings();
+      applyThemeClass(s.theme);
+      set({ settings: s, loaded: true });
+    } catch (error) {
+      // حتی اگر خواندن پایگاه داده شکست بخورد، برنامه باید با پیش‌فرض‌ها بالا بیاید
+      console.error('بارگذاری تنظیمات ناموفق بود:', error);
+      set({ settings: { ...DEFAULT_SETTINGS }, loaded: true });
+    }
   },
 
   update: async (patch) => {
