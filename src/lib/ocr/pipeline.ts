@@ -22,7 +22,20 @@ import { analyzeInvoiceText, applyFreeTextAnalysis } from './freetext';
 import type { FreeMergeInfo, VendorHint } from './freetext';
 import { mergeAiIntoParsed } from './merge';
 import type { AiOcrResult, AiFields } from './aiEngine';
-import type { AppSettings, Invoice } from '../types';
+import type { AppSettings, Invoice, OcrVerification, OcrVerificationStatus } from '../types';
+
+/** شدت وضعیت تأیید؛ بدترین وضعیت بین صفحه‌ها انتخاب می‌شود */
+const VERIFY_RANK: Record<OcrVerificationStatus, number> = { ok: 0, review: 1, unsafe: 2 };
+
+/** انتخاب بدترین وضعیت تأیید بین چند صفحه */
+function worseVerification(
+  current: OcrVerification | undefined,
+  next: OcrVerification | undefined,
+): OcrVerification | undefined {
+  if (!current) return next;
+  if (!next) return current;
+  return VERIFY_RANK[next.status] > VERIFY_RANK[current.status] ? next : current;
+}
 
 export interface FileMeta {
   fileName: string;
@@ -62,6 +75,8 @@ export interface ProcessResult {
   documents?: DocumentCandidate[];
   /** زمان صرف‌شده در هر مرحله (میلی‌ثانیه) */
   timings: { stage: string; ms: number }[];
+  /** نتیجهٔ لایهٔ تأیید؛ نبودش یعنی خروجی تأییدنشده است */
+  verification?: OcrVerification;
 }
 
 export type StageCb = (stage: string, progress: number) => void;
@@ -214,6 +229,8 @@ export async function processFile(
   let deskewAngle = 0;
   let cropped = false;
   let serverEngineUsed = false;
+  let verification: OcrVerification | undefined;
+  let engineLabel: string | undefined;
   let aiResult: AiOcrResult | undefined;
   let preview = '';
   const structuredItems: ServerItem[] = [];
@@ -289,14 +306,41 @@ export async function processFile(
       serverEngineUsed = true;
       pageText = serverResult.text;
       pageConfidence = serverResult.confidence;
-      if (serverResult.items?.length) structuredItems.push(...serverResult.items);
-      if (serverResult.totals) structuredTotals = { ...structuredTotals, ...serverResult.totals };
+      engineLabel = serverResult.engine?.label ?? engineLabel;
+      const pageVerification: OcrVerification | undefined = serverResult.verification
+        ? {
+          ...serverResult.verification,
+          engineId: serverResult.engine?.id ?? undefined,
+          engineLabel: serverResult.engine?.label ?? undefined,
+        }
+        : undefined;
+      verification = worseVerification(verification, pageVerification);
+      // فقط اقلامی که سرویس تأییدشان کرده به فیلدهای مالی می‌رسند
+      if (pageVerification?.status === 'unsafe') {
+        structuredItems.length = 0;
+        structuredTotals = undefined;
+      } else {
+        if (serverResult.items?.length) structuredItems.push(...serverResult.items);
+        if (serverResult.totals) structuredTotals = { ...structuredTotals, ...serverResult.totals };
+      }
     } else {
       const local = await recognizeBest(prepared, settings, (_s, p) =>
         onStage(`خواندن متن صفحه ${i + 1}`, 0.34 + ((i + p) / canvases.length) * 0.5),
       );
       pageText = local.text;
       pageConfidence = local.confidence;
+      // موتور پشتیبان مرورگری: خروجی هرگز «تأییدشده» نیست
+      verification = worseVerification(verification, {
+        status: 'review',
+        confidence: local.confidence,
+        autoConfirm: 85,
+        reviewFloor: 70,
+        flags: ['unverified_engine'],
+        notes: [
+          'این سند با موتور پشتیبان مرورگری خوانده شد و تأیید حسابداری سرویس را ندارد؛ '
+          + 'مبالغ را با اصل سند مقایسه کنید.',
+        ],
+      });
     }
     mark(`خوانش صفحه ${i + 1}`, tOcr);
     textParts.push(pageText);
@@ -319,6 +363,14 @@ export async function processFile(
         onStage(stage, 0.5 + ((i + progress) / canvases.length) * 0.4));
       textParts.push(local.text);
       confSum += local.confidence;
+      verification = worseVerification(verification, {
+        status: 'review',
+        confidence: local.confidence,
+        autoConfirm: 85,
+        reviewFloor: 70,
+        flags: ['unverified_engine'],
+        notes: ['سرویس ابری پاسخ نداد؛ خوانش پشتیبان تأییدشده نیست.'],
+      });
     }
   }
 
@@ -381,7 +433,9 @@ export async function processFile(
 
   let source: OcrSource = 'local';
   if (serverEngineUsed) {
-    parsed.warnings.unshift('این سند با موتور قوی PP-OCRv5 (پردازش محلی) خوانده شد.');
+    parsed.warnings.unshift(
+      `این سند با موتور «${engineLabel ?? 'OCR محلی'}» روی همین دستگاه خوانده شد.`,
+    );
   }
 
   if (aiResult?.ok && aiResult.fields) {
@@ -396,6 +450,22 @@ export async function processFile(
     parsed.warnings.unshift(
       `سرویس ابری پاسخ نداد و سند با موتور محلی خوانده شد: ${aiResult.error ?? 'خطای نامشخص'}`,
     );
+  }
+
+  // آستانهٔ اطمینان سه‌شاخه‌ای: زیر ۷۰٪ هیچ رقم مالی‌ای پر نمی‌شود
+  if (verification?.status === 'unsafe' && !(aiResult?.ok && aiResult.fields)) {
+    parsed.items = [];
+    parsed.total = 0;
+    parsed.taxTotal = 0;
+    parsed.discountTotal = 0;
+    parsed.warnings.unshift(
+      'اطمینان خوانش کمتر از ۷۰٪ است؛ این تصویر قابل تأیید نیست و مبالغ عمداً خالی '
+      + 'گذاشته شد. عکس روشن‌تر و صاف‌تر بگیرید یا مبالغ را دستی وارد کنید.',
+    );
+  } else if (verification?.status === 'review') {
+    verification.notes.forEach((note) => {
+      if (!parsed.warnings.includes(note)) parsed.warnings.push(note);
+    });
   }
   if (deskewAngle >= 0.5) {
     parsed.warnings.unshift(`سند حدود ${deskewAngle.toFixed(1)} درجه کج بود و پیش از خوانش تصحیح شد.`);
@@ -419,7 +489,31 @@ export async function processFile(
     ocrConfidence: confidence,
   }, fullSettings);
 
+  if (!verification && cached) {
+    verification = {
+      status: 'review',
+      confidence: cached.confidence,
+      autoConfirm: 85,
+      reviewFloor: 70,
+      flags: ['cached_result'],
+      notes: ['نتیجه از حافظه محلی بازیابی شد و دوباره تأیید نشده است.'],
+    };
+  }
+
   const invoice = makeInvoice(parsed);
+  if (verification) {
+    invoice.verification = verification;
+    // خروجی تأییدنشده هرگز خودکار «تأییدشده» نمی‌شود
+    if (verification.status !== 'ok' && invoice.status === 'approved') invoice.status = 'review';
+    const extra = verification.flags.includes('item_mismatch')
+      ? ['در برخی ردیف‌ها رقم با معادلهٔ «تعداد × قیمت واحد» نمی‌خواند.']
+      : [];
+    const newWarnings = [...extra, ...verification.notes]
+      .filter((note) => !(invoice.ocrWarnings ?? []).includes(note));
+    if (newWarnings.length) {
+      invoice.ocrWarnings = [...(invoice.ocrWarnings ?? []), ...newWarnings];
+    }
+  }
 
   // چند سند در یک فایل: همه اسناد شناسایی و آماده انتخاب می‌شوند
   let documents: DocumentCandidate[] | undefined;
@@ -463,5 +557,6 @@ export async function processFile(
     fromCache: !!cached,
     documents,
     timings,
+    verification,
   };
 }

@@ -23,6 +23,13 @@ export interface StagedFile {
   checking: boolean;
 }
 
+/** نشان وضعیت لایهٔ تأیید خوانش: سبز / نارنجی / قرمز */
+const VERIFY_META: Record<string, { label: string; tone: string; icon: typeof CheckCircle2 }> = {
+  ok: { label: 'تأییدشده', tone: 'bg-accent-soft text-accent', icon: CheckCircle2 },
+  review: { label: 'بازبینی اختیاری', tone: 'bg-warning-soft text-warning', icon: AlertTriangle },
+  unsafe: { label: 'قابل تأیید نیست', tone: 'bg-danger-soft text-danger', icon: AlertTriangle },
+};
+
 const QUALITY_META: Record<PhotoQuality['verdict'], { label: string; tone: string; icon: typeof CheckCircle2 }> = {
   good: { label: 'کیفیت مناسب', tone: 'bg-accent-soft text-accent', icon: CheckCircle2 },
   fair: { label: 'قابل قبول', tone: 'bg-warning-soft text-warning', icon: AlertTriangle },
@@ -242,6 +249,18 @@ export function QueuePanel({ jobs, stats, paused, onPause, onResume, onCancel, o
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span className="font-semibold text-accent">آماده بازبینی</span>
                     <ConfidenceBar value={job.invoice?.ocrConfidence ?? 0} size="xs" />
+                    {(() => {
+                      const status = job.invoice?.verification?.status;
+                      if (!status) return null;
+                      const meta = VERIFY_META[status];
+                      const engineLabel = job.invoice?.verification?.engineLabel;
+                      return (
+                        <Badge className={`${meta.tone} !text-[10px]`}>
+                          <meta.icon size={10} /> {meta.label}
+                          {engineLabel ? <span className="opacity-70">· {engineLabel}</span> : null}
+                        </Badge>
+                      );
+                    })()}
                     <span>{toFaDigits(job.invoice?.items.length ?? 0)} قلم</span>
                     {job.invoice && (
                       <span className="font-semibold text-foreground/80">

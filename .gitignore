@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-ssr/
+ocr-service/__pycache__/
 ocr-service/wheels/
 ocr-service/.venv/
 *.local

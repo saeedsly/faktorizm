@@ -1,9 +1,14 @@
 /**
- * کلاینت موتور OCR سروری (سرویس پایتون RapidOCR PP-OCRv5)
+ * کلاینت موتور OCR سروری (سرویس پایتون با انتخاب خودکار موتور)
  *
- * در نسخه سروری (Node + سرویس پایتون) از این موتور قوی استفاده می‌شود؛
+ * سرویس پایتون خودش تصمیم می‌گیرد کدام موتور بخواند: Falcon-OCR-Arabic در
+ * اولویت است و اگر وزن مدل یا کتابخانه‌اش نبود، PP-OCRv6 (تشخیص) + رکونایزر
+ * عربی PP-OCRv5. پاسخ همیشه همراه «لایهٔ تأیید» می‌آید که می‌گوید خروجی
+ * قابل‌اعتماد است یا نه.
+ *
  * در نسخه استاتیک htdocs یا هنگام در دسترس نبودن سرویس، همه فراخوانی‌ها
- * به‌سرعت null برمی‌گردانند تا خط لوله بدون خطا به Tesseract fallback کند.
+ * به‌سرعت null برمی‌گردانند و خط لوله با موتور پشتیبان ادامه می‌دهد؛ ولی
+ * نتیجهٔ آن موتور هرگز «تأییدشده» علامت نمی‌خورد.
  */
 import { getAccessToken } from '../api/client';
 
@@ -16,6 +21,24 @@ export interface ServerItem {
   taxRate: number;
   taxAmount?: number;
   total: number;
+  /** در سرویس تشخیص داده شد که تعداد × قیمت واحد با مبلغ ردیف نمی‌خواند */
+  needsReview?: boolean;
+}
+
+/** نتیجهٔ لایهٔ تأیید سرویس (validate.py) */
+export interface ServerVerification {
+  status: 'ok' | 'review' | 'unsafe';
+  confidence: number;
+  autoConfirm: number;
+  reviewFloor: number;
+  flags: string[];
+  notes: string[];
+}
+
+/** موتور فعال در سرویس */
+export interface ServerEngineInfo {
+  id?: string | null;
+  label?: string | null;
 }
 
 export interface ServerTotals {
@@ -34,6 +57,10 @@ export interface ServerOcrResult {
   items?: ServerItem[];
   totals?: ServerTotals;
   variant?: string;
+  /** نتیجهٔ تأیید حسابداری و آستانهٔ اطمینان */
+  verification?: ServerVerification;
+  /** موتوری که سرویس انتخاب کرده است */
+  engine?: ServerEngineInfo;
 }
 
 let availability: 'unknown' | 'up' | 'down' = 'unknown';
@@ -111,6 +138,7 @@ export async function recognizeViaServer(canvas: HTMLCanvasElement): Promise<Ser
           taxRate: Number(it.taxRate ?? 0) || 0,
           taxAmount: Number(it.taxAmount ?? 0) || 0,
           total: Number(it.total ?? 0) || 0,
+          needsReview: it.needsReview === true ? true : undefined,
         }))
         .filter((it: ServerItem) => it.title.length > 0)
       : [];
@@ -122,6 +150,21 @@ export async function recognizeViaServer(canvas: HTMLCanvasElement): Promise<Ser
       items,
       totals: data.totals && typeof data.totals === 'object' ? data.totals : undefined,
       variant: typeof data.variant === 'string' ? data.variant : undefined,
+      verification: data.verification && typeof data.verification === 'object'
+        ? {
+          status: data.verification.status === 'ok' || data.verification.status === 'review'
+            ? data.verification.status
+            : 'unsafe',
+          confidence: Number(data.verification.confidence ?? 0) || 0,
+          autoConfirm: Number(data.verification.autoConfirm ?? 85) || 85,
+          reviewFloor: Number(data.verification.reviewFloor ?? 70) || 70,
+          flags: Array.isArray(data.verification.flags) ? data.verification.flags.map(String) : [],
+          notes: Array.isArray(data.verification.notes) ? data.verification.notes.map(String) : [],
+        }
+        : undefined,
+      engine: data.engine && typeof data.engine === 'object'
+        ? { id: data.engine.id ?? null, label: data.engine.label ?? null }
+        : undefined,
     };
   } catch {
     // خطای شبکه/مهلت: این سند با موتور داخلی خوانده می‌شود

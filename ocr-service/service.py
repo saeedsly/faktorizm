@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-سرویس OCR آفلاین فاکتوریزم — موتور PP-OCRv5 (RapidOCR / ONNX Runtime)
+سرویس OCR آفلاین فاکتوریزم — انتخاب خودکار موتور (Falcon-OCR-Arabic / PP-OCR)
 
 کاملا محلی: فقط روی 127.0.0.1 گوش می‌دهد، هیچ ارتباط اینترنتی ندارد و
 مدل‌ها از پوشه همین سرویس بارگذاری می‌شوند.
@@ -19,7 +19,9 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from pipeline import engine_error, get_engine, recognize_bytes
+import engines
+from pipeline import engine_error, engine_info, get_engine, recognize_bytes
+from validate import AUTO_CONFIRM, REVIEW_FLOOR
 
 PORT = int(os.environ.get('OCR_PORT', '8789'))
 MAX_BODY = 25 * 1024 * 1024  # حداکثر ۲۵ مگابایت برای هر تصویر
@@ -63,11 +65,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.split('?')[0] == '/health':
             ready = get_engine() is not None
+            info = engine_info() if ready else {'id': None, 'label': None}
             self._send(200 if ready else 503, {
                 'ok': ready,
-                'engine': 'RapidOCR PP-OCRv5 (arabic/persian, onnxruntime)',
-                'pipeline': 'multi-variant + reread + rtl-reconstruct',
-                'error': None if ready else engine_error(),
+                'engine': info.get('label'),
+                'engineId': info.get('id'),
+                'engines': engines.available(),
+                'pipeline': 'auto-engine + multi-variant + reread + rtl-reconstruct',
+                'validation': {
+                    'autoConfirm': AUTO_CONFIRM,
+                    'reviewFloor': REVIEW_FLOOR,
+                },
+                'error': None if ready else (engine_error() or 'سرویس OCR در دسترس نیست'),
             })
         else:
             self._send(404, {'ok': False, 'error': 'not found'})
@@ -100,11 +109,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    print('[ocr-service] warming up PP-OCRv5 engine ...', flush=True)
+    print('[ocr-service] warming up OCR engine (auto) ...', flush=True)
     engine = get_engine()
     if engine is None:
         print('[ocr-service] FATAL: engine failed to load:', engine_error(), flush=True)
         sys.exit(2)
+    print(f"[ocr-service] engine: {engine_info()}", flush=True)
     server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     print(f'[ocr-service] ready on http://127.0.0.1:{PORT}', flush=True)
     try:

@@ -1,4 +1,6 @@
-# Runtime dependencies of the Faktorizm local OCR service (PP-OCRv5 via RapidOCR)
+# Runtime dependencies of the Faktorizm local OCR service.
+# Covers the PP-OCR engines (PP-OCRv6 det + Arabic PP-OCRv5 rec) via RapidOCR.
+# Falcon-OCR is optional: see requirements-falcon.txt.
 # Install on the target Windows machine with:
 #   python -m venv .venv
 #   .venv\Scripts\python -m pip install -r requirements.txt

@@ -24,7 +24,10 @@ function toItem(raw: ServerItem): InvoiceItem | null {
     ? Math.round(raw.taxRate * 100) / 100
     : 0;
   if (!unitPrice) return null;
-  return { id: uid('itm_'), title, quantity, unitPrice, discount, taxRate };
+  return {
+    id: uid('itm_'), title, quantity, unitPrice, discount, taxRate,
+    ...(raw.needsReview ? { needsReview: true } : {}),
+  };
 }
 
 /** اقلام خام سرویس را به اقلام معتبر فاکتور تبدیل می‌کند */

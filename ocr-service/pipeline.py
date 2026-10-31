@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-خط لوله خوانش فاکتور — PP-OCRv5 (RapidOCR) با ترکیب چند نسخه تصویر.
+خط لوله خوانش فاکتور — موتور انتخابی خودکار (Falcon-OCR-Arabic یا PP-OCR) با
+ترکیب چند نسخه تصویر.
 
 چرا ترکیب؟ در تصاویر تار و کم‌نور، هر نسخه پردازش‌شده بخشی از متن را بهتر
 می‌خواند: نسخه تیز نویسه‌ها را بهتر می‌بیند، نسخه باینری خطوط کم‌کنتراست را
@@ -9,6 +10,10 @@
 نتیجه: پوشش بالاتر و رقم‌های مطمئن‌تر برای مبالغ.
 
 همه‌چیز محلی است: مدل‌ها از پوشه models و پردازش با PIL/NumPy.
+
+انتخاب موتور با `engines.py` انجام می‌شود (Falcon اولویت دارد، بعد PP-OCRv6،
+بعد PP-OCRv5). خروجی نهایی پیش از تحویل از `validate.py` می‌گذرد: هیچ عددی
+بدون تأیید حسابداری و آستانهٔ اطمینان به داده مالی تبدیل نمی‌شود.
 """
 import io
 import os
@@ -17,8 +22,10 @@ import time
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+from engines import select, selection_error
 from table import extract_items
 from textfix import postprocess_line
+from validate import validate
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.environ.get('OCR_MODEL_DIR', os.path.join(BASE_DIR, 'models'))
@@ -29,38 +36,28 @@ MAX_WIDTH = int(os.environ.get('OCR_MAX_WIDTH', '3000'))
 GOOD_ENOUGH = float(os.environ.get('OCR_GOOD_ENOUGH', '0.87'))
 
 _engine = None
-_engine_error = None
 
 
 def get_engine():
-    """موتور RapidOCR با تنظیمات بهینه فاکتور (یک‌بار بارگذاری می‌شود)."""
-    global _engine, _engine_error
-    if _engine is None and _engine_error is None:
-        try:
-            from rapidocr import RapidOCR
-
-            _engine = RapidOCR(params={
-                'Det.model_path': os.path.join(MODEL_DIR, 'PP-OCRv5_mobile_det.onnx'),
-                'Cls.model_path': os.path.join(MODEL_DIR, 'cls.onnx'),
-                'Rec.model_path': os.path.join(MODEL_DIR, 'arabic_PP-OCRv5_mobile_rec.onnx'),
-                'Rec.rec_keys_path': os.path.join(MODEL_DIR, 'arabic_dict.txt'),
-                # عرض بیشتر برای مبالغ بلند فاکتور تا رقم‌ها بریده نشوند
-                'Rec.rec_img_shape': [3, 48, 640],
-                # حفظ جزئیات اسکن‌های بزرگ؛ مقدار کوچک ستون‌ها را ادغام می‌کند
-                'Det.limit_side_len': int(os.environ.get('OCR_DET_SIDE', '1600')),
-                'Det.limit_type': 'max',
-                'Det.thresh': 0.2,
-                'Det.box_thresh': 0.4,
-                'Det.unclip_ratio': 1.8,
-                'Global.log_level': 'error',
-            })
-        except Exception as exc:  # noqa: BLE001 — خطا به لایه بالاتر گزارش می‌شود
-            _engine_error = f'{type(exc).__name__}: {exc}'
+    """موتور فعال (خودکار انتخاب می‌شود؛ یک‌بار بارگذاری و کش می‌شود)."""
+    global _engine
+    if _engine is None:
+        _engine = select()
     return _engine
 
 
 def engine_error():
-    return _engine_error
+    return selection_error()
+
+
+def engine_info():
+    engine = get_engine()
+    if engine is None:
+        return {'id': None, 'label': None, 'error': selection_error()}
+    try:
+        return engine.info()
+    except Exception:  # noqa: BLE001
+        return {'id': getattr(engine, 'id', None), 'label': getattr(engine, 'label', None)}
 
 
 # ---------------------------------------------------------------- پیش‌پردازش
@@ -163,16 +160,12 @@ def _to_item(box, text, score):
 
 
 def recognize_items(img):
-    """خوانش یک تصویر PIL → فهرست جعبه‌های متنی خام."""
+    """خوانش یک تصویر PIL → فهرست جعبه‌های متنی خام (مستقل از موتور)."""
     engine = get_engine()
     if engine is None:
-        raise RuntimeError(_engine_error or 'OCR engine not ready')
-    arr = np.asarray(img.convert('RGB'))[:, :, ::-1].copy()  # RGB → BGR برای RapidOCR
-    # پرچم‌ها هر بار صریح داده می‌شوند؛ RapidOCR حالت فراخوانی قبلی را نگه می‌دارد
-    result = engine(arr, use_det=True, use_cls=True, use_rec=True)
-    if not result.txts:
-        return []
-    return [_to_item(b, t, s) for b, t, s in zip(result.boxes, result.txts, result.scores)]
+        raise RuntimeError(selection_error() or 'OCR engine not ready')
+    rows, _meta = engine.recognize(img)
+    return [_to_item(box, text, score) for text, score, box in rows]
 
 
 def _digit_count(text):
@@ -184,8 +177,11 @@ def reread_items(img, items, pad_x=0.06, pad_y=0.22):
 
     جعبه‌های تشخیص گاهی لبه رقم‌ها را می‌برند؛ برش مجدد از تصویر اصلی این نقص را
     جبران می‌کند. انتخاب بین دو قرائت محافظه‌کارانه است تا رقم از دست نرود.
+    موتورهایی که جعبه نمی‌دهند (Falcon) از این مرحله رد می‌شوند.
     """
     engine = get_engine()
+    if engine is None or not hasattr(engine, 'reread'):
+        return items, 0
     improved = 0
     for item in items:
         w = max(item['xmax'] - item['xmin'], 1.0)
@@ -198,14 +194,13 @@ def reread_items(img, items, pad_x=0.06, pad_y=0.22):
         )
         if box[2] - box[0] < 8 or box[3] - box[1] < 8:
             continue
-        crop = np.asarray(img.crop(box).convert('RGB'))[:, :, ::-1].copy()
         try:
-            result = engine(crop, use_det=False, use_cls=False, use_rec=True)
+            reread = engine.reread(img, box)
         except Exception:  # noqa: BLE001 — بازخوانی اختیاری است
             continue
-        if not result.txts:
+        if not reread:
             continue
-        new_text, new_score = str(result.txts[0]), float(result.scores[0])
+        new_text, new_score = str(reread[0]), float(reread[1])
         old_text, old_score = item['text'], item['score']
         old_digits, new_digits = _digit_count(old_text), _digit_count(new_text)
 
@@ -334,50 +329,83 @@ def _score(lines):
 
 
 def recognize_bytes(image_bytes, use_variants=True):
-    """خوانش کامل: نسخه‌های تصویر به ترتیب کیفیت، توقف زودهنگام و بازخوانی هدفمند."""
+    """
+    خوانش کامل: نسخه‌های تصویر به ترتیب کیفیت، توقف زودهنگام، بازخوانی هدفمند و
+    در پایان لایهٔ تأیید (validate.py) که تعیین می‌کند خروجی قابل‌اعتماد است یا نه.
+    """
     started = time.perf_counter()
+    engine = get_engine()
+    if engine is None:
+        raise RuntimeError(selection_error() or 'OCR engine not ready')
+    info = engine_info()
     variants, angle = build_variants(image_bytes)
     need = 1 if not use_variants else len(variants)
     if abs(angle) < 1.0:
         variants = [v for v in variants if v[0] != 'کجی‌اصلاح‌شده']
-    # نسخه «اصل» کمکی نمی‌کند؛ تیز و باینری دو روی یک سکه‌اند
-    variants = [v for v in variants if v[0] in ('تیز', 'باینری')]
+
+    # موتورهای سرتاسری (Falcon) خودشان ساختار سند را می‌فهمند؛ ترکیب چند نسخه
+    # فقط هزینه است، پس یک نسخهٔ تیز می‌خوانند.
+    end_to_end = getattr(engine, 'kind', 'rapid') != 'rapid'
+    if end_to_end:
+        variants = [v for v in variants if v[0] == 'تیز'] or variants[:1]
+    else:
+        # نسخه «اصل» کمکی نمی‌کند؛ تیز و باینری دو روی یک سکه‌اند
+        variants = [v for v in variants if v[0] in ('تیز', 'باینری')]
 
     results = []
     trace = []
+    engine_meta = {}
     for name, variant in variants[:need]:
-        items = recognize_items(variant)
+        try:
+            if end_to_end:
+                raw_rows, engine_meta = engine.recognize(variant)
+                items = [_to_item(box, text, score) for text, score, box in raw_rows]
+            else:
+                items = recognize_items(variant)
+        except Exception as exc:  # noqa: BLE001 — موتور بعدی/نسخه بعدی
+            trace.append((name, 'خطا', f'{type(exc).__name__}: {exc}'))
+            continue
         lines = reconstruct_rows(items)
         score = _score(lines)
+        if end_to_end and engine_meta.get('confidence'):
+            # امتیاز واقعی مدل، نه برآورد از پوشش نویسه
+            score = min(score, float(engine_meta['confidence']) * 1.05) \
+                if score else float(engine_meta['confidence'])
         trace.append((name, round(score, 3), len(items)))
         results.append({'name': name, 'items': items, 'lines': lines, 'score': score, 'image': variant})
         if score >= GOOD_ENOUGH:
             break
 
     if not results:
-        return {'lines': [], 'text': '', 'confidence': 0, 'elapsedMs': 0, 'variant': '-', 'skew': angle, 'variants': []}
+        empty = {
+            'lines': [], 'text': '', 'confidence': 0, 'elapsedMs': round((time.perf_counter() - started) * 1000),
+            'variant': '-', 'skew': angle, 'variants': trace, 'items': [], 'totals': {},
+            'engine': info,
+        }
+        return validate(empty)
 
     results.sort(key=lambda r: r['score'], reverse=True)
     best = results[0]
 
-    # بازخوانی هدفمند: فقط جعبه‌های کم‌اطمینان (اکثر تصاویر به این مرحله نیاز ندارند)
-    weak = [i for i in best['items'] if i['score'] < 0.86]
-    if weak:
-        best['items'], improved = reread_items(best['image'], best['items'])
-        if improved:
-            lines = reconstruct_rows(best['items'])
-            if _score(lines) >= best['score'] * 0.98:
-                best = dict(best, lines=lines, name=best['name'] + '+بازخوانی')
-                trace.append(('بازخوانی', round(_score(lines), 3), improved))
+    if not end_to_end:
+        # بازخوانی هدفمند: فقط جعبه‌های کم‌اطمینان (اکثر تصاویر به این مرحله نیاز ندارند)
+        weak = [i for i in best['items'] if i['score'] < 0.86]
+        if weak:
+            best['items'], improved = reread_items(best['image'], best['items'])
+            if improved:
+                lines = reconstruct_rows(best['items'])
+                if _score(lines) >= best['score'] * 0.98:
+                    best = dict(best, lines=lines, name=best['name'] + '+بازخوانی')
+                    trace.append(('بازخوانی', round(_score(lines), 3), improved))
 
-    # اگر هنوز ضعیف است، نسخه دیگر ترکیب می‌شود (نه جایگزین)
-    if len(results) > 1:
-        runner = results[1]
-        if best['score'] < GOOD_ENOUGH and runner['score'] >= best['score'] * 0.94:
-            fused = fuse_items([best['items'], runner['items']])
-            merged = reconstruct_rows(fused)
-            if _score(merged) >= best['score'] * 0.99:
-                best = dict(best, lines=merged, name=f"{best['name']}+{runner['name']}")
+        # اگر هنوز ضعیف است، نسخه دیگر ترکیب می‌شود (نه جایگزین)
+        if len(results) > 1:
+            runner = results[1]
+            if best['score'] < GOOD_ENOUGH and runner['score'] >= best['score'] * 0.94:
+                fused = fuse_items([best['items'], runner['items']])
+                merged = reconstruct_rows(fused)
+                if _score(merged) >= best['score'] * 0.99:
+                    best = dict(best, lines=merged, name=f"{best['name']}+{runner['name']}")
 
     lines = best['lines']
     text = '\n'.join(line['text'] for line in lines)
@@ -387,7 +415,7 @@ def recognize_bytes(image_bytes, use_variants=True):
     total_chars = max(sum(len(line['text']) for line in lines), 1)
     confidence = round(
         sum(line['confidence'] * max(len(line['text']), 1) for line in lines) / total_chars * 100, 1)
-    return {
+    result = {
         'lines': lines,
         'text': text,
         'confidence': confidence,
@@ -397,4 +425,8 @@ def recognize_bytes(image_bytes, use_variants=True):
         'variants': trace,
         'items': structured_items,
         'totals': totals,
+        'engine': info,
     }
+    if engine_meta:
+        result['engineMeta'] = {k: v for k, v in engine_meta.items() if k != 'raw'}
+    return validate(result)

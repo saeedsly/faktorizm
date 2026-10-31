@@ -135,6 +135,50 @@ def header_sequence(header_row):
     return [f for f in (header_field(it['text']) for it in cells) if f]
 
 
+def column_roles(header_row):
+    """ستون‌های عنوان‌دار سربرگ، با بازهٔ افقی هر ستون."""
+    if header_row is None:
+        return []
+    cols = []
+    for item in header_row['items']:
+        field = header_field(item['text'])
+        if not field:
+            continue
+        cols.append({
+            'field': field,
+            'xmin': item['xmin'],
+            'xmax': item['xmax'],
+            'cx': _center(item),
+            'width': max(item['xmax'] - item['xmin'], 1.0),
+        })
+    return cols
+
+
+def roles_by_columns(row, cols):
+    """
+    نقش هر عدد را از «ستون» آن در جدول می‌گیرد، نه از معادلهٔ ردیف.
+
+    در جدول واقعی جای ستون‌ها ثابت است؛ تکیه بر موقعیت از حدس معادله‌ای دقیق‌تر
+    است و جلوی خطای رایج «A4 در شرح کالا به‌عنوان تعداد خوانده شود» را می‌گیرد.
+    """
+    if not cols:
+        return {}
+    data = {}
+    for item in sorted(row['items'], key=lambda i: -_center(i)):
+        value = parse_number(item['text'])
+        if value is None:
+            continue
+        cx = _center(item)
+        best = min(cols, key=lambda c: abs(c['cx'] - cx))
+        # فاصلهٔ بیش از دو برابر عرض ستون یعنی عدد به هیچ ستونی تعلق ندارد
+        if abs(best['cx'] - cx) > best['width'] * 2:
+            continue
+        if best['field'] == 'title':
+            continue
+        data.setdefault(best['field'], value)
+    return data
+
+
 def _row_numbers(row):
     """اعداد سطر به ترتیب راست به چپ، همراه با خانه مربوطه."""
     out = []
@@ -252,6 +296,7 @@ def extract_items(items):
     rows = group_rows(items)
     header_row = find_header(rows)
     hint = header_sequence(header_row)
+    cols = column_roles(header_row)
     start = header_row['index'] if header_row else 0
 
     out = []
@@ -283,7 +328,10 @@ def extract_items(items):
         if not numbers:
             continue
         values = [v for _, v in numbers]
-        roles = assign_roles(values, hint)
+        roles = roles_by_columns(row, cols) if cols else {}
+        if not (roles.get('unit_price') or roles.get('total')):
+            # ستون‌بندی سربرگ راه نداد (ردیف ناقص/چسبیده): معادلهٔ ردیف تصمیم می‌گیرد
+            roles = assign_roles(values, hint)
 
         unit_price = int(roles.get('unit_price') or 0)
         total = int(roles.get('total') or 0)

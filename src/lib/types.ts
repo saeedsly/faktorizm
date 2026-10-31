@@ -10,6 +10,25 @@ export interface InvoiceItem {
   unitPrice: number;
   discount: number;
   taxRate: number;
+  /** رقم این ردیف با معادله «تعداد × قیمت واحد» نمی‌خواند و باید بازبینی شود */
+  needsReview?: boolean;
+}
+
+/** وضعیت تأیید خوانش خودکار: سبز / نارنجی / قرمز */
+export type OcrVerificationStatus = 'ok' | 'review' | 'unsafe';
+
+export interface OcrVerification {
+  status: OcrVerificationStatus;
+  /** اطمینان خوانش، درصد */
+  confidence: number;
+  /** آستانه‌ای که از آن به بالا خودکار تأیید می‌شود */
+  autoConfirm: number;
+  /** پایین‌تر از این آستانه، خروجی «قابل تأیید نیست» */
+  reviewFloor: number;
+  flags: string[];
+  notes: string[];
+  engineId?: string;
+  engineLabel?: string;
 }
 
 export interface FieldConfidence {
@@ -49,6 +68,8 @@ export interface Invoice {
   fieldConfidence: FieldConfidence;
   /** هشدارهای دستیار هوشمند OCR برای بازبینی انسانی */
   ocrWarnings?: string[];
+  /** نتیجهٔ لایهٔ تأیید (آستانهٔ اطمینان + بررسی حسابداری) */
+  verification?: OcrVerification;
   fileName: string;
   fileType: string;
   thumbnail: string;
