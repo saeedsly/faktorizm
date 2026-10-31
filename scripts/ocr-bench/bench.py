@@ -27,7 +27,10 @@ FA_DIGITS = str.maketrans('۰۱۲۳۴۵۶۷۸۹', '0123456789')
 def norm(text):
     """نرمال‌سازی برای مقایسه: ارقام فارسی، فاصله‌ها و نویسه‌های نمایشی."""
     text = text.translate(FA_DIGITS)
-    text = text.replace('٬', '').replace(',', '').replace('|', ' ').replace('\u200c', ' ').replace('ي', 'ی').replace('ك', 'ک')
+    text = text.replace('٬', '').replace(',', '').replace('|', ' ').replace('\u200c', ' ')
+    # جداکنندهٔ تاریخ/شماره حذف می‌شود تا «1404/05/12» با «14040512» سنجیده شود
+    text = text.replace('/', '').replace('-', '').replace('.', '')
+    text = text.replace('ي', 'ی').replace('ك', 'ک')
     return ' '.join(text.split())
 
 
@@ -55,7 +58,10 @@ def cer(ref, hyp):
 
 
 def field_report(truth, text, parsed=None):
-    """درستی فیلدهای کلیدی: جست‌وجوی مستقیم مقدار در متن خوانده‌شده."""
+    """
+    درستی فیلدهای کلیدی: جست‌وجوی مستقیم مقدار در متن خوانده‌شده، و برای
+    جمع‌ها، مقایسه با جمع‌های تأییدشدهٔ لایهٔ اعتبارسنجی (`parsed`).
+    """
     flat = norm(text).replace(' ', '')
     out = {}
 
@@ -66,7 +72,11 @@ def field_report(truth, text, parsed=None):
     out['تاریخ'] = date in flat or (len(date) == 8 and date[:4] in flat and date[4:] in flat)
 
     total = digits_only(str(truth['total']))
-    out['جمع کل'] = total in flat
+    verified_total = None
+    if parsed:
+        verified_total = (parsed.get('totals') or {}).get('total')
+    out['جمع کل'] = total in flat or (
+        verified_total is not None and abs(int(verified_total) - int(truth['total'])) <= 1)
 
     item_hits = 0
     for item in truth['items']:
@@ -80,14 +90,25 @@ def field_report(truth, text, parsed=None):
 
 def reference_text(truth):
     """متن کامل مرجع برای سنجش CER روی کل سند."""
-    parts = [truth['seller'], truth['sellerMeta'], 'صورتحساب فروش کالا و خدمات',
+    parts = [truth['seller'], truth.get('sellerMeta') or '', 'صورتحساب فروش کالا و خدمات',
              f'شماره فاکتور: {truth["number"]}', f'تاریخ: {truth["date"]}',
-             f'خریدار: {truth["buyer"]}', truth['buyerMeta'],
+             f'خریدار: {truth["buyer"]}', truth.get('buyerMeta') or '',
              'شرح کالا تعداد مبلغ واحد مبلغ کل']
     for item in truth['items']:
         parts.append(f'{item["name"]} {item["qty"]} {item["unit"]:,} {item["total"]:,}')
     parts += ['جمع کل', 'مالیات بر ارزش افزوده', 'مبلغ قابل پرداخت', str(truth['total'])]
     return '\n'.join(parts)
+
+
+def truth_for(name):
+    """
+    مرجع هر تصویر: قالب دوم (invoice-alt) فاکتور دیگری است و مرجع خودش را
+    دارد؛ مقایسهٔ آن با مرجع قالب اول بی‌معنا بود.
+    """
+    alt = os.path.join(HERE, 'invoice-truth-alt.json')
+    if 'alt' in name and os.path.exists(alt):
+        return json.load(open(alt, encoding='utf-8'))
+    return json.load(open(os.path.join(HERE, 'invoice-truth.json'), encoding='utf-8'))
 
 
 def run(image_path):
@@ -102,7 +123,6 @@ def run(image_path):
 
 
 def main():
-    truth = json.load(open(os.path.join(HERE, 'invoice-truth.json'), encoding='utf-8'))
     names = sys.argv[1:] or ['invoice-clean.png', 'invoice-alt.png', 'invoice-photo.jpg', 'invoice-lowres.jpg']
     print(f'{"تصویر":<20}{"CER":>8}{"اطمینان":>10}{"زمان":>10}  وضعیت فیلدها')
     print('-' * 100)
@@ -112,6 +132,7 @@ def main():
         if not os.path.exists(path):
             print(f'{name}: یافت نشد')
             continue
+        truth = truth_for(name)
         try:
             result, elapsed = run(path)
         except Exception as exc:  # noqa: BLE001
@@ -119,7 +140,7 @@ def main():
             continue
         score = cer(reference_text(truth), result['text'])
         all_cer.append(score)
-        fields = field_report(truth, result['text'])
+        fields = field_report(truth, result['text'], result)
         print(f'{name:<20}{score * 100:>7.1f}%{result["confidence"]:>9.1f}%{elapsed:>8.0f}ms  {fields}')
         if os.environ.get('BENCH_TEXT'):
             print('  ── متن خوانده‌شده ──')

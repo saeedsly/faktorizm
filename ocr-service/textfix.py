@@ -13,8 +13,21 @@
 ۲) یکسان‌سازی نویسه‌های عربی/فارسی (ي→ی، ك→ک، ة→ه) و ارقام عربی به فارسی.
 ۳) قالب‌بندی همه مبالغ با جداکننده هزارگان فارسی تا خروجی خوانا باشد.
 ۴) اصلاح واژه‌های پرتکرار فاکتور با فاصله ویرایشی (Levenshtein) محدود.
+۵) واژه‌نامهٔ فارسی (`persian_dict.py`): حروف هم‌شکل با هزینهٔ کم اصلاح
+   می‌شوند، واژهٔ چسبیده به دو واژه شکسته می‌شود («کابلیک» → «کابل یک») و
+   ارقام مخدوش («1O5») ترمیم می‌شوند.
 """
+import os
 import re
+
+try:
+    import persian_dict
+except ImportError:  # pragma: no cover — اجرای مستقل فایل
+    persian_dict = None
+
+# خاموش‌کردن واژه‌نامه برای مقایسه و عیب‌یابی: OCR_DICT=0 python service.py
+if persian_dict is not None and os.environ.get('OCR_DICT') == '0':
+    persian_dict = None
 
 # ------------------------------------------------------------ ترتیب منطقی
 
@@ -212,6 +225,11 @@ VOCAB = [
     'پارس', 'آرین', 'ایران', 'تهران', 'اصفهان', 'شیراز', 'مشهد', 'تبریز',
 ]
 
+# واژه‌نامهٔ مشترک (حروف هم‌شکل، ارقام و ۴۶۵ واژهٔ فاکتوری) از پیمانهٔ
+# persian_dict می‌آید؛ VOCAB بالا فقط واژه‌های خاص این فایل را نگه می‌دارد.
+if persian_dict is not None:
+    VOCAB = sorted(set(VOCAB) | set(persian_dict.WORDS))
+
 
 def _edit_distance_at_most_one(a, b):
     if abs(len(a) - len(b)) > 1:
@@ -250,7 +268,18 @@ _MIN_FIX_LEN = 4
 
 
 def fix_words(text):
-    """اصلاح واژه‌های نزدیک به واژه‌نامه (فقط اختلاف یک نویسه)."""
+    """
+    اصلاح واژه‌ها با واژه‌نامه.
+
+    اگر `persian_dict` در دسترس باشد، تصمیم با فاصلهٔ وزن‌دار گرفته می‌شود:
+    جابه‌جایی دو حرف هم‌شکل (ب/پ/ت/ث/ن/ی، مبلغ/مبلق) ارزان است و پذیرفته
+    می‌شود، ولی جابه‌جایی دو حرف بی‌ربط گران است و واژهٔ درست را خراب نمی‌کند.
+    واژهٔ چسبیده هم به دو واژه شکسته می‌شود.
+    """
+    if persian_dict is not None:
+        # واژه‌ها و بعد عبارت‌های ثابت فاکتور («مالیات بر وزم» → «مالیات بر ارزش»)
+        return persian_dict.fix_phrases(persian_dict.correct_text(text))
+
     def repl(match):
         word = match.group(0)
         if word in _INDEX:
@@ -300,6 +329,9 @@ def choose_orientation(line):
 
 def postprocess_line(line, fix_vocab=True, format_nums=True, force_visual=None):
     line = normalize(line)
+    if persian_dict is not None:
+        # 1O5 → ۱۰۵ ، ٤٥ → ۴۵ (پیش از هر کار دیگری تا اعداد سالم بمانند)
+        line = persian_dict.repair_numbers(line)
     if force_visual is True:
         line = visual_to_logical(line)
     elif force_visual is None:

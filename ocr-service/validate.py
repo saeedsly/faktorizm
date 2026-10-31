@@ -23,6 +23,11 @@
 import os
 import re
 
+try:
+    import persian_dict
+except ImportError:  # pragma: no cover
+    persian_dict = None
+
 AUTO_CONFIRM = float(os.environ.get('OCR_AUTO_CONFIRM', '0.85'))
 REVIEW_FLOOR = float(os.environ.get('OCR_REVIEW_FLOOR', '0.70'))
 MONEY_TOLERANCE = float(os.environ.get('OCR_MONEY_TOLERANCE', '0.01'))
@@ -67,6 +72,8 @@ def clean_number(text):
     raw = str(text).replace('\u066c', '').replace('\u060c', '').replace(',', '')
     raw = raw.replace('\u200c', '').replace(' ', '')
     raw = to_latin_digits(raw)
+    if persian_dict is not None:
+        raw = persian_dict.repair_number_token(raw) or raw
     raw = ''.join(LETTER_TO_DIGIT.get(ch, ch) for ch in raw)
     cleaned = ''.join(ch for ch in raw if ch in NUMERIC_WHITELIST)
     return cleaned or None
@@ -118,6 +125,29 @@ def valid_invoice_number(text):
     if len(re.sub(r'\D', '', cleaned)) < 3:
         return None
     return cleaned
+
+
+def _power_of_ten_fix(observed, expected, tolerance=0.02):
+    """
+    اگر عدد خوانده‌شده فقط در تعداد ارقام با عدد حساب‌شده فرق کند (یک یا چند
+    صفر افتاده/تکرار شده) عدد حساب‌شده برگردانده می‌شود؛ وگرنه None.
+    """
+    try:
+        observed = int(observed)
+        expected = int(expected)
+    except (TypeError, ValueError):
+        return None
+    if not observed or not expected or observed < 0 or expected < 0:
+        return None
+    if abs(observed - expected) <= max(MONEY_TOLERANCE, expected * tolerance):
+        return None
+    for power in (1, 2, 3):
+        scale = 10 ** power
+        if abs(observed * scale - expected) <= expected * tolerance:
+            return expected
+        if abs(observed / scale - expected) <= expected * tolerance:
+            return expected
+    return None
 
 
 def _reject(clean, catalog, label, detail):
@@ -215,6 +245,43 @@ def validate(result):
                 flags.append('numeric_whitelist')
             else:
                 totals[key] = value
+
+    # ---------------------------------------------------- ترمیم ریاضیِ جمع‌ها
+    # موتور OCR گاهی در جریان عددهای بزرگ یک صفر می‌اندازد («۱۰٬۵۶۶٬۰۰۰» ←
+    # «۱٬۰۵۶٬۶۰۰»). اگر نرخ مالیات و جمع اقلام را داشته باشیم، تعداد ارقام از
+    # راه حساب تأیید می‌شود؛ عددِ ساختگی درنمی‌آید، همان عددِ خوانده‌شده در
+    # توان ۱۰ اصلاح می‌شود و در `flags` هم گزارش می‌گردد.
+    if items:
+        # پایهٔ حساب: جمع اقلامِ خوانده‌شده (اگر «جمع کل» سطر جدا نداشته باشد)
+        line_sum = sum(parse_money(i.get('total')) or 0 for i in items)
+        subtotal = parse_money(totals.get('subtotal')) or line_sum
+        rate = totals.get('taxRate')
+        tax = totals.get('tax')
+        if totals.get('subtotal') and subtotal and rate and tax:
+            expected_tax = round(subtotal * rate / 100)
+            fixed = _power_of_ten_fix(tax, expected_tax)
+            if fixed:
+                totals['tax'] = fixed
+                tax = fixed
+                flags.append('repaired_tax_digits')
+                notes.append(f'رقم‌های مالیات با نرخ {rate}٪ هم‌خوان نبود؛ از روی '
+                             f'جمع اقلام به {fixed:,} اصلاح شد.')
+
+        discount = parse_money(totals.get('discount')) or 0
+        if tax:
+            expected_total = subtotal + tax - discount
+            actual_total = totals.get('total')
+            if actual_total:
+                fixed = _power_of_ten_fix(actual_total, expected_total)
+                if fixed:
+                    totals['total'] = fixed
+                    flags.append('repaired_total_digits')
+                    notes.append(f'رقم‌های جمع کل با جمع اقلام و مالیات هم‌خوان نبود؛ '
+                                 f'از روی حساب به {fixed:,} اصلاح شد.')
+            else:
+                totals['total'] = expected_total
+                flags.append('total_derived')
+                notes.append('جمع کل خوانده نشد؛ از جمع اقلام و مالیات محاسبه شد.')
 
     if 'item_mismatch' in flags:
         notes.append('در برخی ردیف‌ها تعداد × قیمت واحد با مبلغ ردیف نمی‌خواند؛ '

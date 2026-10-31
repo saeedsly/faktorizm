@@ -22,6 +22,8 @@ import time
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
+import re
+
 from engines import select, selection_error
 from table import extract_items
 from textfix import postprocess_line
@@ -222,6 +224,164 @@ def reread_items(img, items, pad_x=0.06, pad_y=0.22):
     return items, improved
 
 
+# ------------------------------------------------------------ خوانش دوم
+_FA_LETTERS = re.compile(r'[\u0621-\u064A\u0671-\u06D3\u06FA-\u06FF]')
+_ANY_DIGITS = re.compile(r'[0-9۰-۹٠-٩]')
+
+
+def _fa_count(text):
+    return len(_FA_LETTERS.findall(text or ''))
+
+
+def _digit_count(text):
+    return len(_ANY_DIGITS.findall(text or ''))
+
+
+# برچسب‌هایی که بعدشان در فاکتور عدد می‌آید. اگر برچسب دیده شود ولی رقمی
+# خوانده نشود، یعنی رکونایزر شماره را انداخته است؛ همان کادر باید دوباره
+# با رکونایزر چندزبانه خوانده شود («شماره فاکتور: 14032287» ← «شماره فاکتور»).
+NUMBER_LABELS = ('تلفن', 'شماره', 'کد', 'شناسه', 'تاریخ', 'پلاک', 'ملی',
+                 'اقتصادی', 'پستی', 'شبا', 'حساب', 'فکس', 'موبایل', 'همراه')
+
+
+def _has_number_label(text):
+    return any(label in (text or '') for label in NUMBER_LABELS)
+
+
+def _fa_tokens(text):
+    return [tok.strip('،:.؛()|') for tok in (text or '').split()
+            if len(_FA_LETTERS.findall(tok)) >= 3]
+
+
+def _covers(primary, secondary):
+    """آیا خوانش دوم همهٔ واژه‌های فارسی اولی را دارد؟"""
+    tokens = _fa_tokens(primary)
+    if not tokens:
+        return False
+    joined = (secondary or '').replace('\u200c', '')
+    return all(tok.replace('\u200c', '') in joined for tok in tokens)
+
+
+def _has_summary_word(text):
+    words = ('قابل', 'جمع', 'مالیات', 'تخفیف', 'عوارض', 'مانده', 'پیش پرداخت',
+             'ارزش افزوده', 'نهایی')
+    return any(word in (text or '') for word in words)
+
+
+def needs_second_opinion(item):
+    """
+    کادرهایی که رکونایزر فارسی معمولاً در آن‌ها می‌لنگد:
+    * اطمینان پایین (خط عددی یا متن لاتین)
+    * خطی که تقریباً نویسهٔ فارسی ندارد (تاریخ، کد، مدل لاتین)
+    * هر کادری که رقم دارد؛ رقم‌ها همان چیزی‌اند که نباید اشتباه خوانده شوند
+      («1404/05/12» در خوانش اول به «/404/05» تبدیل می‌شد)
+    """
+    text = item['text']
+    if _ANY_DIGITS.search(text):
+        return True
+    # برچسب عددی بدون هیچ رقم ⇒ احتمالاً رقم از دست رفته است
+    if _has_number_label(text):
+        return True
+    if item['score'] < 0.90:
+        return True
+    return _fa_count(text) < 3
+
+
+def merge_readings(primary, primary_score, secondary, secondary_score):
+    """
+    انتخاب/ترکیب دو خوانش یک کادر.
+
+    قاعده‌ها محافظه‌کارانه‌اند: خوانش دوم فقط وقتی جای اولی را می‌گیرد که
+    اطمینانش آشکارا بالاتر و اولی مشکوک باشد؛ وقتی اولی متن فارسی سالم دارد
+    و دومی فقط رقم/لاتین است، دومی به انتهای خط اضافه می‌شود («کد اقتصادی» +
+    شمارهٔ دقیق) و هیچ واژهٔ فارسی‌ای دور ریخته نمی‌شود.
+    """
+    primary = (primary or '').strip()
+    secondary = (secondary or '').strip()
+    if not secondary:
+        return primary, primary_score
+    if not primary:
+        return secondary, secondary_score
+
+    p_fa, s_fa = _fa_count(primary), _fa_count(secondary)
+    p_d, s_d = _digit_count(primary), _digit_count(secondary)
+
+    # ۰) خوانش دوم همهٔ واژه‌های اولی را دارد و رقم بیشتری هم دارد
+    #    («شماره فاکتور» ← «14032287 :شماره فاکتور»): هیچ متنی از دست نمی‌رود،
+    #    فقط رقمِ جاافتاده اضافه می‌شود.
+    if s_d > p_d and secondary_score >= 0.75 and _covers(primary, secondary):
+        return secondary, secondary_score
+
+    # ۱) خوانش اول عملاً شکست خورده و دومی مطمئن است
+    #    اگر هر دو فارسی دارند، متن اولی حفظ می‌شود؛ رکونایزر چندزبانه در
+    #    فارسی اطمینان بالا می‌دهد ولی نویسه‌های بی‌ربط می‌سازد.
+    if primary_score < 0.6 and secondary_score >= 0.8 and (p_fa < 2 or s_fa < 2):
+        return secondary, secondary_score
+
+    # ۲) کادر عددی/لاتین: رقمی که کامل‌تر و مطمئن‌تر است برنده است
+    if p_fa < 2 and s_fa < 2:
+        truncation = (s_d >= p_d + 2 and secondary_score >= 0.9
+                      and secondary_score >= primary_score - 0.05)
+        if truncation or secondary_score > primary_score + 0.15:
+            return secondary, secondary_score
+        if s_d > p_d and secondary_score >= max(0.5, primary_score - 0.2):
+            return secondary, secondary_score
+        return primary, primary_score
+
+    # ۳) متن فارسی سالم + رقم کامل‌تر از خوانش دوم
+    #    اگر خط اولیه هیچ رقمی ندارد، الصاق رقم تنهای خوانش دوم فقط وقتی مجاز
+    #    است که خود خط، برچسب عددی/جمع داشته باشد («تلفن»، «مبلغ قابل»)؛
+    #    وگرنه یعنی رقمِ کادر همسایه به این خط چسبانده می‌شود = ساختن داده.
+    numeric_like = p_d > 0 or _has_number_label(primary) or _has_summary_word(primary)
+    if p_fa >= 2 and s_d > p_d and numeric_like and secondary_score >= 0.78 \
+            and (s_fa == 0 or s_d >= p_d + 3):
+        if secondary.replace(' ', '') in primary.replace(' ', ''):
+            return primary, primary_score
+        # رقم‌های ناقص/غلط خوانش اول دور ریخته می‌شوند تا دو عدد متناقض نماند
+        if s_d >= p_d + 3:
+            words = ' '.join(t for t in primary.split() if not _ANY_DIGITS.search(t))
+            merged = f'{words} {secondary}'.strip()
+            return merged, max(primary_score, secondary_score)
+        return f'{primary} {secondary}', max(primary_score, secondary_score)
+
+    # ۴) خوانش دوم هم فارسی دارد: فقط وقتی اولی تقریباً فارسی نداشته باشد
+    #    (رکونایزر چندزبانه در فارسی ضعیف است و نباید متن سالم را عوض کند)
+    if s_fa >= 2 and p_fa < 2 and secondary_score > primary_score + 0.1:
+        return secondary, secondary_score
+    return primary, primary_score
+
+
+def apply_second_opinions(img, items, limit=None):
+    """برای کادرهای مشکوک، خوانش دوم گرفته و بهترین قرائت را نگه می‌دارد."""
+    engine = get_engine()
+    if engine is None or not hasattr(engine, 'second_opinion'):
+        return items, 0
+    changed = 0
+    for item in items:
+        if not needs_second_opinion(item):
+            continue
+        if limit is not None and changed >= limit:
+            break
+        box = (int(item['xmin']), int(item['ymin']), int(item['xmax']), int(item['ymax']))
+        try:
+            reading = engine.second_opinion(img, box)
+        except Exception:  # noqa: BLE001 — خوانش دوم اختیاری است
+            continue
+        if not reading:
+            continue
+        text, score = postprocess_line(str(reading[0])), float(reading[1])
+        if not text.strip():
+            continue
+        merged, merged_score = merge_readings(item['text'], item['score'], text, score)
+        if merged != item['text']:
+            # متن ترکیبی دوباره از واژه‌نامه/عبارت‌ها می‌گذرد («مالیات بر وزم»)
+            merged = postprocess_line(merged)
+            item['text'] = merged
+            item['score'] = merged_score
+            changed += 1
+    return items, changed
+
+
 def _iou(a, b):
     x1, y1 = max(a['xmin'], b['xmin']), max(a['ymin'], b['ymin'])
     x2, y2 = min(a['xmax'], b['xmax']), min(a['ymax'], b['ymax'])
@@ -397,6 +557,14 @@ def recognize_bytes(image_bytes, use_variants=True):
                 if _score(lines) >= best['score'] * 0.98:
                     best = dict(best, lines=lines, name=best['name'] + '+بازخوانی')
                     trace.append(('بازخوانی', round(_score(lines), 3), improved))
+
+        # خوانش دوم با رکونایزر چندزبانه: خط‌های عددی و لاتین
+        best['items'], extra_fixes = apply_second_opinions(best['image'], best['items'])
+        if extra_fixes:
+            lines = reconstruct_rows(best['items'])
+            if _score(lines) >= best['score'] * 0.98:
+                best = dict(best, lines=lines, name=best['name'] + '+خوانش‌دوم')
+                trace.append(('خوانش‌دوم', round(_score(lines), 3), extra_fixes))
 
         # اگر هنوز ضعیف است، نسخه دیگر ترکیب می‌شود (نه جایگزین)
         if len(results) > 1:

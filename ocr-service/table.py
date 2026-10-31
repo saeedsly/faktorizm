@@ -14,6 +14,11 @@
 """
 import itertools
 import re
+
+try:
+    import persian_dict
+except ImportError:  # pragma: no cover
+    persian_dict = None
 from statistics import median
 
 FA_DIGITS = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
@@ -29,9 +34,10 @@ HEADER_RULES = [
     ('title', ('شرح', 'کالا', 'خدمت', 'نام', 'توضیح', 'عنوان', 'ردیف', 'description', 'item')),
 ]
 
-SUMMARY_WORDS = ('جمع کل', 'قابل پرداخت', 'مالیات', 'ارزش افزوده', 'تخفیف', 'عوارض',
-                 'مانده', 'پیش پرداخت', 'مبلغ نهایی', 'جمع مبلغ', 'total', 'subtotal',
-                 'grand total', 'discount', 'vat', 'tax')
+SUMMARY_WORDS = ('جمع کل', 'قابل پرداخت', 'مبلغ قابل', 'قابل پرداخت نهایی',
+                 'مالیات', 'ارزش افزوده', 'تخفیف', 'عوارض', 'کسورات',
+                 'مانده', 'پیش پرداخت', 'مبلغ نهایی', 'جمع مبلغ', 'جمع کل مبلغ',
+                 'total', 'subtotal', 'grand total', 'discount', 'vat', 'tax')
 
 FOOTER_WORDS = ('مهر', 'امضا', 'امضای', 'صادر', 'توجه', 'شرایط', 'توضیح', 'آدرس',
                 'تلفن', 'وب‌سایت', 'وب سایت', 'بانک', 'شبا', 'شماره حساب', 'تشکر',
@@ -62,6 +68,9 @@ def parse_number(text):
     if text is None:
         return None
     cleaned = str(text).translate(FA_DIGITS).replace('٫', '.')
+    if persian_dict is not None:
+        # «1O5» و «S0» در فونت چاپی رقم‌اند، نه حرف
+        cleaned = persian_dict.repair_numbers(cleaned)
     grouped = _GROUPED.search(cleaned)
     source = grouped.group(0).replace(' ', '').replace('\u2009', '') if grouped else cleaned
     match = _MONEY.search(source)
@@ -179,12 +188,41 @@ def roles_by_columns(row, cols):
     return data
 
 
+# نرخ مالیات در همان خانهٔ مبلغ می‌آید: «مالیات بر ارزش افزوده ۹٪ ۱۰٬۵۶۶٬۰۰۰».
+# درصد، عدد نیست و نباید جای مبلغ بنشیند.
+_RATE_TOKEN = re.compile(r'[0-9۰-۹٠-٩]{1,3}\s*[٪%]|[٪%]\s*[)\]}]?\s*\(?\s*[0-9۰-۹٠-٩]{1,3}')
+
+
+def _numbers_in(text):
+    """
+    همهٔ عددهای یک خانه؛ اگر خانه نرخ درصدی داشته باشد، درصد شمرده نمی‌شود و
+    مبلغِ کنارش از دست نمی‌رود.
+    """
+    raw = str(text or '')
+    masked = _RATE_TOKEN.sub(' ', raw)
+    values = []
+    for match in _MONEY.finditer(masked.translate(FA_DIGITS)):
+        token = re.sub(r'[\s٬،,]', '', match.group(0)).strip('.')
+        if not token:
+            continue
+        try:
+            values.append(float(token) if '.' in token else int(token))
+        except ValueError:
+            continue
+    return values
+
+
 def _row_numbers(row):
     """اعداد سطر به ترتیب راست به چپ، همراه با خانه مربوطه."""
     out = []
     for item in sorted(row['items'], key=lambda i: -_center(i)):
-        value = parse_number(item['text'])
-        if value is not None:
+        text = item['text']
+        if _RATE_TOKEN.search(text):
+            values = _numbers_in(text)
+        else:
+            value = parse_number(text)
+            values = [] if value is None else [value]
+        for value in values:
             out.append((item, value))
     return out
 
@@ -291,6 +329,21 @@ def _clean_title(text):
     return text.strip(' -|:.')
 
 
+_RATE = re.compile(r'(\d{1,2})\s*[٪%]|[٪%]\s*[)\]}]?\s*\(?\s*(\d{1,2})')
+
+
+def _tax_rate(text):
+    """نرخ مالیات از متنی مثل «مالیات بر ارزش افزوده (۹٪)»."""
+    match = _RATE.search(text or '')
+    if not match:
+        return None
+    raw = next((g for g in match.groups() if g), None)
+    if not raw:
+        return None
+    value = int(raw)
+    return value if 0 < value <= 100 else None
+
+
 def extract_items(items):
     """اقلام ساخت‌یافته جدول + مبالغ جمع‌بندی."""
     rows = group_rows(items)
@@ -315,10 +368,13 @@ def extract_items(items):
             amounts = [v for _, v in numbers if v >= 100]
             if amounts:
                 amount = max(amounts)
-                if 'قابل پرداخت' in low or 'نهایی' in low:
+                if 'قابل پرداخت' in low or 'مبلغ قابل' in low or 'نهایی' in low:
                     totals['total'] = amount
                 elif 'مالیات' in low or 'ارزش افزوده' in low or 'عوارض' in low:
                     totals['tax'] = amount
+                    rate = _tax_rate(low)
+                    if rate:
+                        totals['taxRate'] = rate
                 elif 'تخفیف' in low:
                     totals['discount'] = amount
                 elif 'جمع' in low:
