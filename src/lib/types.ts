@@ -35,6 +35,26 @@ export interface FieldConfidence {
   [field: string]: number;
 }
 
+/**
+ * شاهد خوانش یک فیلد: مقدار از کدام خط/کادر متن OCR آمده و چقدر قابل‌اعتماد است.
+ * برای کارت «بازبینی فیلد‌به‌فیلد» استفاده می‌شود؛ عمداً هیچ مقدار ساختگی ندارد.
+ */
+export interface FieldEvidence {
+  /** کلید فیلد در `ParsedInvoice` (number، date، issuerName، …) */
+  field: string;
+  label: string;
+  value: string;
+  /** متن خطی که مقدار از آن استخراج شد */
+  source: string;
+  /** شمارهٔ خط (از ۱) در متن خوانده‌شده */
+  line?: number;
+  /** ناحیهٔ سند: سربرگ | جدول اقلام | جمع‌ها و پاورقی */
+  region: string;
+  confidence: number;
+  status: 'ok' | 'review' | 'missing';
+  hint?: string;
+}
+
 export interface Invoice {
   id: string;
   number: string;

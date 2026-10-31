@@ -11,7 +11,7 @@ import MoneyInput from '@/components/MoneyInput';
 import InvoiceSummary from '@/components/InvoiceSummary';
 import {
   AttachmentsCard, PaymentPlanCard, HistoryCard, AutofixCard, VendorCard,
-  DuplicateAlert, SuggestedItemsCard, ConfidenceBreakdown, DueDateCard,
+  DuplicateAlert, SuggestedItemsCard, ConfidenceBreakdown, DueDateCard, FieldEvidenceCard,
 } from '@/components/invoice/InvoicePanels';
 import ItemIntelligence from '@/components/invoice/ItemIntelligence';
 import { detectItems } from '@/lib/ocr/items';
@@ -536,6 +536,8 @@ export default function InvoiceEdit({ mode }: { mode: 'create' | 'edit' }) {
                   </div>
                 </div>
               )}
+
+              <FieldEvidenceCard invoice={invoice} onChange={(p) => patch(p)} />
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <ConfidenceBreakdown invoice={invoice} />

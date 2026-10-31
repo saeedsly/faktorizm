@@ -281,20 +281,21 @@ def validate(result):
                              f'جمع اقلام به {fixed:,} اصلاح شد.')
 
         discount = parse_money(totals.get('discount')) or 0
-        if tax:
-            expected_total = subtotal + tax - discount
-            actual_total = totals.get('total')
-            if actual_total:
-                fixed = _power_of_ten_fix(actual_total, expected_total)
-                if fixed:
-                    totals['total'] = fixed
-                    flags.append('repaired_total_digits')
-                    notes.append(f'رقم‌های جمع کل با جمع اقلام و مالیات هم‌خوان نبود؛ '
-                                 f'از روی حساب به {fixed:,} اصلاح شد.')
-            else:
-                totals['total'] = expected_total
-                flags.append('total_derived')
-                notes.append('جمع کل خوانده نشد؛ از جمع اقلام و مالیات محاسبه شد.')
+        # اگر نرخ/مبلغ مالیات خوانده نشده باشد، جمع اقلام خودش مبلغ نهایی است
+        # (فاکتورهای ستون‌دار که مالیات در هر ردیف حساب شده است).
+        expected_total = subtotal + (tax or 0) - discount
+        actual_total = totals.get('total')
+        if actual_total and expected_total:
+            fixed = _power_of_ten_fix(actual_total, expected_total)
+            if fixed:
+                totals['total'] = fixed
+                flags.append('repaired_total_digits')
+                notes.append(f'رقم‌های جمع کل با جمع اقلام و مالیات هم‌خوان نبود؛ '
+                             f'از روی حساب به {fixed:,} اصلاح شد.')
+        elif not actual_total and (tax or totals.get('subtotal')):
+            totals['total'] = expected_total
+            flags.append('total_derived')
+            notes.append('جمع کل خوانده نشد؛ از جمع اقلام و مالیات محاسبه شد.')
 
     # ------------------------------------------- شماره‌های هویتی برچسب‌دار
     # «کد ملی ۰۰۱۲۳۴۵۶۷۸» یا «شبا IR…» اگر رقم کنترل نخواند، یعنی موتور یک

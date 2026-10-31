@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Paperclip, History, RotateCcw, Wallet, Wand2, Building2, Clock, CheckCircle2,
-  AlertTriangle, Upload, Trash2, Plus, Sparkles, FileText, ArrowLeft,
+  AlertTriangle, Upload, Trash2, Plus, Sparkles, FileText, ArrowLeft, ScanText,
 } from 'lucide-react';
 import { Button, Card, CardTitle, Input, Label, Select, Badge, EmptyState, Progress, Modal } from '@/components/ui/primitives';
 import { db } from '@/lib/db';
@@ -16,7 +16,9 @@ import {
 import { suggestFixes, applyFixes, buildDictionary } from '@/lib/ocr/autofix';
 import type { FixSuggestion } from '@/lib/ocr/autofix';
 import { getVendor, learnFromInvoice, vendorSuggestions } from '@/lib/vendors';
-import type { AuditEntry, Invoice, InvoiceVersion, PaymentPlan, VendorProfile } from '@/lib/types';
+import type { AuditEntry, FieldEvidence, Invoice, InvoiceVersion, PaymentPlan, VendorProfile } from '@/lib/types';
+import { parseInvoiceText } from '@/lib/ocr/parser';
+import { buildFieldEvidence, evidenceSummary } from '@/lib/ocr/evidence';
 
 /* ------------------------------------------------------- پیوست‌ها */
 
@@ -565,4 +567,176 @@ export function MultiDocModal({ open, documents, onClose, onPick }: {
 
 export function NoAttachments() {
   return <EmptyState icon={<Paperclip size={22} />} title="پیوستی نیست" />;
+}
+
+/* ------------------------------------------------- بازبینی فیلد‌به‌فیلد */
+
+const EDIT_MAP: Record<string, keyof Invoice> = {
+  number: 'number',
+  date: 'date',
+  issuerName: 'issuerName',
+  buyerName: 'buyerName',
+  total: 'total',
+  taxTotal: 'taxTotal',
+  discountTotal: 'discountTotal',
+};
+
+/**
+ * «این مقدار از کدام کادر خوانده شد؟»
+ *
+ * هر فیلد با مقدارش، ناحیهٔ سند، شمارهٔ خط و درصد اطمینان نشان داده می‌شود؛
+ * خط مبدأ هم در یک کادر کوچک دیده می‌شود تا کاربر بتواند بدون رفتن به تب متن
+ * خام مقایسه کند. دو دکمه: «تأیید» (اطمینان ۱۰۰٪) و «اصلاح» (ویرایش همان‌جا).
+ * هیچ عددی این‌جا ساخته نمی‌شود؛ هرچه هست از متن OCR یا ویرایش خود کاربر است.
+ */
+export function FieldEvidenceCard({ invoice, onChange }: {
+  invoice: Invoice;
+  onChange: (patch: Partial<Invoice>) => void;
+}) {
+  const raw = invoice.rawText?.trim() ?? '';
+  const defaultRate = invoice.items?.[0]?.taxRate ?? 9;
+  const parsed = useMemo(
+    () => (raw ? parseInvoiceText(raw, invoice.ocrConfidence ?? 0, defaultRate) : null),
+    [raw, invoice.ocrConfidence, defaultRate],
+  );
+  const evidence = useMemo(() => (parsed ? buildFieldEvidence(parsed, raw) : []), [parsed, raw]);
+  const summary = useMemo(() => evidenceSummary(evidence), [evidence]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [showAll, setShowAll] = useState(false);
+
+  if (!raw || !evidence.length) return null;
+
+  // فیلدهای نیازمند بازبینی اول می‌آیند تا چشم کاربر همان‌جا بیفتد
+  const rank = (s: FieldEvidence['status']) => (s === 'missing' ? 0 : s === 'review' ? 1 : 2);
+  const sorted = [...evidence].sort((a, b) => rank(a.status) - rank(b.status));
+  const rows = showAll ? sorted : sorted.slice(0, 5);
+
+  const startEdit = (ev: FieldEvidence) => {
+    setEditing(ev.field);
+    setDraft(ev.value);
+  };
+
+  const commit = (ev: FieldEvidence) => {
+    const key = EDIT_MAP[ev.field];
+    if (!key) return;
+    const value = draft.trim();
+    const patch: Partial<Invoice> = {
+      fieldConfidence: { ...invoice.fieldConfidence, [ev.field]: value ? 96 : 30 },
+    } as Partial<Invoice>;
+    if (ev.field === 'total' || ev.field === 'taxTotal' || ev.field === 'discountTotal') {
+      const amount = Number(value.replace(/[^\d]/g, ''));
+      (patch as Record<string, unknown>)[key] = Number.isFinite(amount) ? amount : 0;
+    } else {
+      (patch as Record<string, unknown>)[key] = value;
+    }
+    onChange(patch);
+    setEditing(null);
+    toast.success(`«${ev.label}» اصلاح شد`);
+  };
+
+  const accept = (ev: FieldEvidence) => {
+    onChange({ fieldConfidence: { ...invoice.fieldConfidence, [ev.field]: 99 } });
+  };
+
+  return (
+    <Card className="!p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-bold flex items-center gap-1.5">
+          <ScanText size={14} className="text-info" /> بازبینی فیلد‌به‌فیلد
+        </p>
+        <div className="flex items-center gap-1.5">
+          {summary.missing > 0 && (
+            <Badge className="bg-danger-soft text-danger !text-[10px]">{toFaDigits(summary.missing)} نخوانده</Badge>
+          )}
+          {summary.review > 0 && (
+            <Badge className="bg-warning-soft text-warning !text-[10px]">{toFaDigits(summary.review)} کم‌اطمینان</Badge>
+          )}
+          {summary.ok > 0 && (
+            <Badge className="bg-accent-soft text-accent !text-[10px]">{toFaDigits(summary.ok)} تأییدشده</Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 space-y-1.5">
+        {rows.map((ev) => {
+          const key = EDIT_MAP[ev.field];
+          const badge = ev.status === 'missing' ? 'danger' : ev.status === 'review' ? 'warning' : 'accent';
+          return (
+            <div key={ev.field} className="rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex items-center gap-1.5">
+                  <span className="text-[11px] font-bold shrink-0">{ev.label}</span>
+                  <span className={cn(
+                    'text-[11px] tabular-nums truncate',
+                    ev.status === 'missing' ? 'text-danger' : 'text-foreground/80',
+                  )} title={ev.value}>
+                    {ev.value ? moneyOrText(ev.field, ev.value, invoice.currency) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className={cn(
+                    'text-[10px] font-bold tabular-nums px-1.5 rounded-full',
+                    badge === 'accent' ? 'bg-accent-soft text-accent'
+                      : badge === 'warning' ? 'bg-warning-soft text-warning' : 'bg-danger-soft text-danger',
+                  )}>
+                    {ev.confidence > 0 ? `${toFaDigits(ev.confidence)}٪` : '—'}
+                  </span>
+                  {key && ev.status !== 'ok' && (
+                    <button onClick={() => accept(ev)} title="تأیید مقدار فعلی"
+                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-accent-soft text-accent hover:opacity-80">
+                      تأیید
+                    </button>
+                  )}
+                  {key && (
+                    <button onClick={() => (editing === ev.field ? setEditing(null) : startEdit(ev))}
+                      className="text-[10px] px-1.5 py-0.5 rounded-md bg-primary-soft text-primary hover:opacity-80">
+                      {editing === ev.field ? 'بستن' : 'اصلاح'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {editing === ev.field ? (
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <Input value={draft} onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commit(ev); }}
+                    className="!h-8 !text-[11px] tabular-nums" placeholder={`مقدار درست ${ev.label}`} />
+                  <Button size="sm" className="!h-8 !px-2 !text-[11px]" onClick={() => commit(ev)}>ثبت</Button>
+                </div>
+              ) : (
+                <p className="mt-1 text-[10px] text-muted-foreground flex items-start gap-1">
+                  <span className="shrink-0 rounded bg-background/70 px-1 py-[1px] text-[9px]">
+                    {ev.line ? `کادر ${toFaDigits(ev.line)}` : 'بی‌کادر'} · {ev.region}
+                  </span>
+                  <span className="truncate" title={ev.source || ev.hint}>
+                    {ev.source || ev.hint}
+                  </span>
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {evidence.length > 4 && (
+        <button onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-[11px] text-primary hover:underline">
+          {showAll ? 'نمایش فقط موارد نیازمند بازبینی' : `نمایش همهٔ ${toFaDigits(evidence.length)} فیلد`}
+        </button>
+      )}
+      <p className="mt-2 text-[10px] text-muted-foreground">
+        «کادر» شمارهٔ خط در متن خوانده‌شده است؛ متن همان خط زیرش آمده تا بتوانید مقدار را با اصل سند بسنجید.
+      </p>
+    </Card>
+  );
+}
+
+/** نمایش مبلغ با جداکننده برای فیلدهای عددی و متن خام برای بقیه */
+function moneyOrText(field: string, value: string, currency: Invoice['currency']): string {
+  if (field === 'total' || field === 'taxTotal' || field === 'discountTotal') {
+    const amount = Number(value);
+    return Number.isFinite(amount) && amount > 0 ? formatMoney(amount, currency) : value;
+  }
+  return toFaDigits(value);
 }

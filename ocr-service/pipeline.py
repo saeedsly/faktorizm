@@ -123,22 +123,143 @@ def _sauvola(gray, k=0.2):
     return Image.fromarray(((arr > threshold) * 255).astype(np.uint8), mode='L')
 
 
-def build_variants(image_bytes):
-    """نسخه‌های بهبودیافته تصویر؛ خروجی (فهرست (نام، تصویر)، کجی)."""
+def _clahe(gray, clip_limit=2.5, tiles=8):
+    """
+    CLAHE — یکسان‌سازی هیستوگرامِ محلی با برشِ کنتراست.
+
+    عکس‌های موبایل معمولاً یک طرف کاغذ روشن و طرف دیگر سایه‌دار است؛
+    autocontrast سراسری در این حالت متنِ سایه‌دار را از دست می‌دهد. اینجا
+    تصویر به کاشی‌های هم‌اندازه تقسیم می‌شود، هیستوگرام هر کاشی جدا
+    یکسان‌سازی (و برای مهار نویز برش) می‌شود و نتیجه با درون‌یابی دوخطی
+    بین کاشی‌ها ترکیب می‌گردد تا مرز کاشی‌ها دیده نشود.
+    """
+    arr = np.asarray(gray, dtype=np.float32)
+    h, w = arr.shape
+    if h < tiles * 4 or w < tiles * 4:
+        return ImageOps.autocontrast(gray, cutoff=1)
+    tile_h, tile_w = h // tiles, w // tiles
+    luts = np.zeros((tiles, tiles, 256), dtype=np.float32)
+    limit = max(int(clip_limit * (tile_h * tile_w) / 256.0), 1)
+
+    for ty in range(tiles):
+        for tx in range(tiles):
+            tile = arr[ty * tile_h:(ty + 1) * tile_h, tx * tile_w:(tx + 1) * tile_w]
+            hist = np.bincount(tile.astype(np.uint8).ravel(), minlength=256).astype(np.float32)
+            excess = np.sum(np.maximum(hist - limit, 0))
+            hist = np.minimum(hist, limit) + excess / 256.0
+            cdf = np.cumsum(hist) / max(hist.sum(), 1.0)
+            luts[ty, tx] = np.floor(cdf * 255.0)
+
+    ys = np.clip((np.arange(h) - tile_h / 2.0) / tile_h, 0, tiles - 1.001)
+    xs = np.clip((np.arange(w) - tile_w / 2.0) / tile_w, 0, tiles - 1.001)
+    y0, x0 = ys.astype(np.int32), xs.astype(np.int32)
+    fy = (ys - y0)[:, None]
+    fx = (xs - x0)[None, :]
+    values = arr.astype(np.uint8)
+
+    def lut(iy, ix):
+        return luts[iy[:, None], ix[None, :], values]
+
+    top = lut(y0, x0) * (1 - fx) + lut(y0, x0 + 1) * fx
+    bottom = lut(y0 + 1, x0) * (1 - fx) + lut(y0 + 1, x0 + 1) * fx
+    out = top * (1 - fy) + bottom * fy
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode='L')
+
+
+def _contrast_stats(gray):
+    """چند سنجهٔ ساده که می‌گوید عکس به CLAHE یا اصلاح کجی نیاز دارد یا نه."""
+    arr = np.asarray(gray.resize((min(gray.width, 480), max(int(gray.height * min(gray.width, 480) / gray.width), 1))), dtype=np.float32)
+    std = float(arr.std())
+    # نسبت پیکسل‌های خیلی تاریک/روشن: نشانهٔ نور ناهموار
+    dark = float((arr < 60).mean())
+    bright = float((arr > 200).mean())
+    uneven = min(dark, bright)
+    return {'std': round(std, 1), 'uneven': round(uneven, 3)}
+
+
+def _sharpness(gray):
+    """
+    سنجهٔ تیزی تصویر (واریانس لاپلاسی) روی نسخهٔ کوچک‌شده.
+
+    عکس تار (موبایلِ لرزان یا تصویر کم‌کیفیت) با بزرگ‌نمایی بیشتر بهتر خوانده
+    می‌شود؛ عکس واضح با بزرگ‌نمایی بیشتر کند و گاهی بدتر می‌شود. این عدد در
+    `_resize_for_ocr` و ترتیب نسخه‌ها استفاده می‌شود.
+    """
+    small = gray.copy()
+    small.thumbnail((420, 420))
+    arr = np.asarray(small, dtype=np.float32)
+    if arr.shape[0] < 3 or arr.shape[1] < 3:
+        return 0.0
+    lap = (arr[1:-1, :-2] + arr[1:-1, 2:] + arr[:-2, 1:-1] + arr[2:, 1:-1]) - 4 * arr[1:-1, 1:-1]
+    return float(lap.var())
+
+
+def _resize_for_ocr(gray, sharpness=None):
+    """بزرگ‌نمایی هوشمند: عرض را به بازه مطلوب می‌رساند، بدون شکستن نسبت."""
+    w, h = gray.size
+    target = min(max(MIN_WIDTH, w), MAX_WIDTH)
+    if sharpness is None:
+        sharpness = _sharpness(gray)
+    # تصویر باریک و تار (اسکن کم‌کیفیت/عکسِ دور): متن ریز است و بزرگ‌نمایی
+    # بیشتر دقت را بالا می‌برد. عکس بزرگ‌ترِ تار از بزرگ‌نمایی سودی نمی‌برد.
+    if w < 1000 and sharpness < 900:
+        target = min(max(target, int(w * 3.0), 1900), min(MAX_WIDTH, 2400))
+    if target <= w * 1.02:
+        return gray
+    scale = target / w
+    return gray.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+
+def build_variant_plan(image_bytes):
+    """
+    نسخه‌های تصویر به‌صورت «تنبل» (thunk): هر نسخه فقط وقتی ساخته می‌شود که
+    نوبت خواندنش برسد. عکس سالم فقط هزینهٔ «تیز» را می‌دهد.
+
+    ترتیب: تیز ← درمان‌های لازم (کنتراست/کجی) ← باینری. خوانش با اولین نسخهٔ
+    خوب متوقف می‌شود، پس ترتیب مهم‌تر از تعداد است.
+    """
     img = Image.open(io.BytesIO(image_bytes))
     img = ImageOps.exif_transpose(img).convert('RGB')
-    up = _resize_for_ocr(_to_gray(img))
+    gray = _to_gray(img)
+    sharpness = _sharpness(gray)
+    up = _resize_for_ocr(gray, sharpness)
 
-    sharp = _unsharp(ImageOps.autocontrast(up, cutoff=1))
-    variants = [('تیز', sharp), ('اصل', up)]
+    base = ImageOps.autocontrast(up, cutoff=1)
+    stats = _expect = _contrast_stats(base)
+    plan = [('تیز', lambda: _unsharp(base))]
 
-    angle = _estimate_skew(sharp)
-    if abs(angle) >= 0.3:
-        variants.append(('کجی‌اصلاح‌شده', ImageOps.autocontrast(
-            sharp.rotate(angle, resample=Image.BICUBIC, fillcolor=255), cutoff=1)))
+    # CLAHE فقط برای عکس‌هایی که کنتراست محلی‌شان واقعاً کم است
+    needs_contrast = stats['std'] < 46 or stats['uneven'] > 0.22
+    if needs_contrast:
+        plan.append(('کنتراست', lambda: _unsharp(_clahe(base))))
 
-    variants.append(('باینری', _sauvola(_median(sharp))))
-    return variants, angle
+    angle = _estimate_skew(_unsharp(base))
+    if abs(angle) >= 0.6:
+        def rotated_base():
+            return ImageOps.autocontrast(
+                _unsharp(base).rotate(angle, resample=Image.BICUBIC, fillcolor=255), cutoff=1)
+
+        plan.append(('کجی‌اصلاح‌شده', rotated_base))
+        if needs_contrast:
+            plan.append(('کنتراست‌کجی', lambda: _unsharp(_clahe(rotated_base()))))
+
+    plan.append(('باینری', lambda: _sauvola(_median(_unsharp(base)))))
+    plan.append(('اصل', lambda: up))
+
+    # نتیجهٔ کالیبراسیون: `OCR_PREP` نسخهٔ برنده را اول صف می‌گذارد (بقیه به‌عنوان
+    # پشتیبان می‌مانند). خروجی calibrate.py مستقیم همین‌جا قابل استفاده است.
+    preferred = {'sharp': 'تیز', 'contrast': 'کنتراست', 'deskew': 'کجی‌اصلاح‌شده',
+                 'binary': 'باینری'}.get(os.environ.get('OCR_PREP', '').strip())
+    if preferred:
+        plan.sort(key=lambda entry: 0 if entry[0] == preferred else 1)
+
+    return plan, angle, {'sharpness': round(sharpness, 1), **stats}
+
+
+def build_variants(image_bytes):
+    """نسخه‌های بهبودیافته تصویر؛ خروجی (فهرست (نام، تصویر)، کجی)."""
+    plan, angle, _meta = build_variant_plan(image_bytes)
+    return [(name, make()) for name, make in plan], angle
 
 
 def _median(img):
@@ -262,6 +383,14 @@ def _covers(primary, secondary):
     return all(tok.replace('\u200c', '') in joined for tok in tokens)
 
 
+def _strip_digit_chars(token):
+    """حذف ارقام و جداکننده‌های عددی از یک واژه، بدون دست‌زدن به حروف."""
+    token = _ANY_DIGITS.sub(' ', token)
+    for sep in '/\\-.:٬,)(+':
+        token = token.replace(sep, ' ')
+    return token.strip()
+
+
 def _has_summary_word(text):
     words = ('قابل', 'جمع', 'مالیات', 'تخفیف', 'عوارض', 'مانده', 'پیش پرداخت',
              'ارزش افزوده', 'نهایی')
@@ -332,6 +461,8 @@ def merge_readings(primary, primary_score, secondary, secondary_score):
     #    اگر خط اولیه هیچ رقمی ندارد، الصاق رقم تنهای خوانش دوم فقط وقتی مجاز
     #    است که خود خط، برچسب عددی/جمع داشته باشد («تلفن»، «مبلغ قابل»)؛
     #    وگرنه یعنی رقمِ کادر همسایه به این خط چسبانده می‌شود = ساختن داده.
+    #    اگر خط هیچ رقمی ندارد، الصاق فقط با «برچسب عددی/جمع» مجاز است
+    #    («تلفن»، «شماره»، «مبلغ قابل»)؛ وگرنه رقمِ کادر همسایه چسبانده می‌شود.
     numeric_like = p_d > 0 or _has_number_label(primary) or _has_summary_word(primary)
     if p_fa >= 2 and s_d > p_d and numeric_like and secondary_score >= 0.78 \
             and (s_fa == 0 or s_d >= p_d + 3):
@@ -339,7 +470,10 @@ def merge_readings(primary, primary_score, secondary, secondary_score):
             return primary, primary_score
         # رقم‌های ناقص/غلط خوانش اول دور ریخته می‌شوند تا دو عدد متناقض نماند
         if s_d >= p_d + 3:
-            words = ' '.join(t for t in primary.split() if not _ANY_DIGITS.search(t))
+            # رقم‌ها از واژه‌ها کنده می‌شوند ولی برچسب («تاریخ»، «کد») می‌ماند؛
+            # واژهٔ کاملِ حاوی رقم («تاریخ/404/05») نباید کامل حذف شود
+            words = ' '.join(_strip_digit_chars(t) for t in primary.split())
+            words = ' '.join(w for w in words.split() if w)
             merged = f'{words} {secondary}'.strip()
             return merged, max(primary_score, secondary_score)
         return f'{primary} {secondary}', max(primary_score, secondary_score)
@@ -498,24 +632,27 @@ def recognize_bytes(image_bytes, use_variants=True):
     if engine is None:
         raise RuntimeError(selection_error() or 'OCR engine not ready')
     info = engine_info()
-    variants, angle = build_variants(image_bytes)
-    need = 1 if not use_variants else len(variants)
-    if abs(angle) < 1.0:
-        variants = [v for v in variants if v[0] != 'کجی‌اصلاح‌شده']
+    plan, angle, image_stats = build_variant_plan(image_bytes)
+    need = 1 if not use_variants else len(plan)
+    if abs(angle) < 0.6:
+        plan = [(n, f) for n, f in plan if 'کجی' not in n]
 
     # موتورهای سرتاسری (Falcon) خودشان ساختار سند را می‌فهمند؛ ترکیب چند نسخه
     # فقط هزینه است، پس یک نسخهٔ تیز می‌خوانند.
     end_to_end = getattr(engine, 'kind', 'rapid') != 'rapid'
     if end_to_end:
-        variants = [v for v in variants if v[0] == 'تیز'] or variants[:1]
+        plan = [(n, f) for n, f in plan if n == 'تیز'] or plan[:1]
     else:
-        # نسخه «اصل» کمکی نمی‌کند؛ تیز و باینری دو روی یک سکه‌اند
-        variants = [v for v in variants if v[0] in ('تیز', 'باینری')]
+        # ترتیب نسخه‌ها در build_variant_plan تعیین می‌شود؛ «اصل» آخرین راه است
+        plan = [(n, f) for n, f in plan if n != 'اصل'] or plan[:1]
+        # سقف زمان: حداکثر سه نسخه برای هر تصویر
+        plan = plan[:2]
 
     results = []
     trace = []
     engine_meta = {}
-    for name, variant in variants[:need]:
+    for name, make in plan[:need]:
+        variant = make()
         try:
             if end_to_end:
                 raw_rows, engine_meta = engine.recognize(variant)
@@ -594,6 +731,7 @@ def recognize_bytes(image_bytes, use_variants=True):
         'items': structured_items,
         'totals': totals,
         'engine': info,
+        'preprocess': image_stats,
     }
     if engine_meta:
         result['engineMeta'] = {k: v for k, v in engine_meta.items() if k != 'raw'}
