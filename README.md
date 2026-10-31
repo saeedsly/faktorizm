@@ -181,6 +181,17 @@ python ocr-service/service.py                  # موتور OCR روی 8789 (آ�
 npm run dev                                    # رابط کاربری روی 5173
 ```
 
+یا همه‌چیز روی **یک پورت** (رابط build‌شده از همان سرور سرو می‌شود؛ ساده‌ترین
+حالت برای پیش‌نمایش و تست):
+
+```bash
+npm run build
+ALLOW_PREVIEW=1 WEB_DIR=dist node server/src/index.js     # http://localhost:8787
+```
+
+`ALLOW_PREVIEW=1` فقط دو هدر امنیتی (`frame-ancestors` و `X-Frame-Options`) را
+باز می‌کند تا برنامه داخل قاب پیش‌نمایش باز شود؛ در استقرار واقعی خاموش بماند.
+
 برای آزمون خوانش، نمونه‌های آماده در `public/samples/` هست:
 `factorin-clean.png` (اسکن تمیز)، `factorin-photo.jpg` (عکس با کیفیت متوسط) و
 `factorin-lowres.jpg` (عکس کم‌کیفیت که باید «بازبینی اختیاری» یا «قابل تأیید

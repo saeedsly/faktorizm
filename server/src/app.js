@@ -26,6 +26,7 @@ function isOriginAllowed(origin, allowed) {
 
 export function createApp() {
   const app = express();
+  const allowPreview = process.env.ALLOW_PREVIEW === '1';
   app.set('trust proxy', 1);
   app.disable('x-powered-by');
 
@@ -41,10 +42,15 @@ export function createApp() {
         imgSrc: ["'self'", 'data:', 'blob:'],
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
-        frameAncestors: ["'none'"],
+        // در استقرار عادی هیچ سایتی اجازهٔ قاب‌کردن برنامه را ندارد؛ برای پیش‌نمایش
+        // داخل میزکار (ALLOW_PREVIEW=1) فقط دامنهٔ پیش‌نمایش مجاز می‌شود.
+        frameAncestors: allowPreview ? ["'self'", 'https://*.e2b.app', 'https://*.arena.ai'] : ["'none'"],
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // هدر X-Frame-Options با frame-ancestors در CSP هم‌پوشانی دارد؛ در حالت
+    // پیش‌نمایش باید برداشته شود تا برنامه داخل قاب میزکار باز شود.
+    xFrameOptions: allowPreview ? false : { action: 'deny' },
   }));
 
   app.use(cors({
