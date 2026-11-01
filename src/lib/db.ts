@@ -56,6 +56,29 @@ class FaktorizmDB extends Dexie {
 
 export const db = new FaktorizmDB();
 
+/**
+ * پروفایل آماده — بستهٔ «تست سریع».
+ *
+ * کاربر این کلید را خودش ساخته و خواسته داخل برنامه باشد تا لازم نباشد دنبال
+ * ساخت کلید برود. کلید فقط به‌عنوان مقدار اولیه در IndexedDB همین دستگاه
+ * می‌نشیند (همان جایی که کلید دستی هم می‌نشست) و به هیچ سروری فرستاده نمی‌شود.
+ * برای بسته‌های عمومی، `PRESET_KEY` را خالی کنید.
+ */
+const PRESET_KEY = 'K8752522415505188957';
+
+const PRESET: Partial<AppSettings> = PRESET_KEY
+  ? {
+    ocrEngine: 'ai',
+    aiProvider: 'ocrspace',
+    aiKeys: PRESET_KEY,
+    aiApiKey: '',
+    aiModel: 'ara',
+    aiBaseUrl: 'https://api.ocr.space',
+    aiAskEachTime: false,
+    onboarded: true,
+  }
+  : {};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   id: 'singleton',
   businessName: 'کسب‌وکار من',
@@ -79,10 +102,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoApproveThreshold: 85,
   onboarded: false,
   seeded: false,
+  ...PRESET,
 };
 
 /** شناسه‌های معتبر موتور ابری — برای پاک‌سازی داده‌های ذخیره‌شدهٔ نسخه‌های قدیمی */
-const KNOWN_PROVIDERS = ['gemini', 'openrouter', 'github', 'groq', 'mistral', 'ollama', 'custom', 'openai'];
+const KNOWN_PROVIDERS = ['gemini', 'ocrspace', 'openrouter', 'github', 'groq', 'mistral', 'ollama', 'custom', 'openai'];
 const KNOWN_ENGINES = ['local', 'ai', 'hybrid'];
 
 /**
@@ -107,6 +131,14 @@ export function normalizeSettings(raw?: Partial<AppSettings> | null): AppSetting
 export async function getSettings(): Promise<AppSettings> {
   const stored = await db.settings.get('singleton');
   const settings = normalizeSettings(stored);
+  // نصب تازه/تنظیمات قبلی بدون کلید: پروفایل آماده فقط کلید و موتور را پر می‌کند
+  // و انتخاب‌های دیگر کاربر (تم، نرخ مالیات، نام کسب‌وکار) را دست نمی‌زند.
+  if (PRESET_KEY && !(settings.aiKeys ?? '').trim() && !(settings.aiApiKey ?? '').trim()) {
+    settings.aiKeys = PRESET_KEY;
+    settings.aiProvider = 'ocrspace';
+    settings.aiModel = settings.aiModel || 'ara';
+    settings.ocrEngine = settings.ocrEngine === 'local' ? 'ai' : settings.ocrEngine;
+  }
   // پاک‌سازی یک‌بارهٔ رکورد قدیمی تا دفعهٔ بعد چیزی برای ترمیم نماند
   if (stored && JSON.stringify(stored) !== JSON.stringify(settings)) {
     await db.settings.put(settings);
