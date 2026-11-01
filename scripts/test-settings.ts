@@ -14,11 +14,20 @@ function check(name: string, ok: boolean, extra = '') {
 const stale = { id: 'singleton', businessName: 'قدیمی', aiProvider: 'removed-provider' } as never;
 const fixed = normalizeSettings(stale);
 check('شناسهٔ موتور حذف‌شده اصلاح می‌شود', fixed.aiProvider === DEFAULT_SETTINGS.aiProvider, fixed.aiProvider);
-check('فیلدهای تازه پر می‌شوند', fixed.ocrEngine === 'local' && Array.isArray(fixed.aiKeys) === false);
+// تنظیمات قدیمی که فیلد تازه ندارد: موتور باید یکی از حالت‌های معتبر باشد و
+// aiKeys باید رشته بماند (در نسخه‌های قدیمی آرایه بود و صفحه را سفید می‌کرد).
+check('فیلدهای تازه پر می‌شوند',
+  ['local', 'ai', 'hybrid'].includes(fixed.ocrEngine) && typeof fixed.aiKeys === 'string',
+  `${fixed.ocrEngine}/${typeof fixed.aiKeys}`);
 check('آستانهٔ عددی معتبر می‌ماند', fixed.autoApproveThreshold === 85);
 
 const empty = normalizeSettings(undefined);
-check('تنظیمات خالی به پیش‌فرض می‌رسد', empty.aiProvider === 'gemini' && empty.currency === 'IRT');
+// پیش‌فرض این بسته «کلید آماده + موتور ابری» است؛ مهم این است که سرویس معتبر
+// باشد و واحد پول پیش‌فرض دست‌نخورده بماند.
+check('تنظیمات خالی به پیش‌فرض معتبر می‌رسد',
+  empty.aiProvider === DEFAULT_SETTINGS.aiProvider && empty.currency === 'IRT',
+  `${empty.aiProvider}/${empty.currency}`);
+check('سرویس پیش‌فرض شناخته‌شده است', ['gemini', 'ocrspace'].includes(empty.aiProvider), empty.aiProvider);
 
 const brokenNumbers = normalizeSettings({ autoApproveThreshold: Number.NaN, defaultTaxRate: 500, theme: 'neon' } as never);
 check('آستانهٔ خراب اصلاح می‌شود', brokenNumbers.autoApproveThreshold === 85);
