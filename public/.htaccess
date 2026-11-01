@@ -13,6 +13,16 @@ AddType application/manifest+json .webmanifest
 # UTF-8 for all text responses
 AddDefaultCharset UTF-8
 
+# هرگز index.html و sw.js را کش نکنید — وگرنه بعد از به‌روزرسانی بسته،
+# مرورگر نسخهٔ قدیمی (بدون کلید) را نشان می‌دهد.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header unset ETag
+  </FilesMatch>
+</IfModule>
+
 # Long cache for hashed/static assets
 <IfModule mod_expires.c>
   ExpiresActive On
@@ -20,4 +30,9 @@ AddDefaultCharset UTF-8
   ExpiresByType application/gzip "access plus 30 days"
   ExpiresByType text/css "access plus 30 days"
   ExpiresByType application/javascript "access plus 30 days"
+</IfModule>
+<IfModule mod_expires.c>
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    ExpiresActive Off
+  </FilesMatch>
 </IfModule>

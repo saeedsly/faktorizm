@@ -1,6 +1,6 @@
 // سرویس‌ورک فاکتوریزم — پشتیبانی از کار آفلاین و نصب PWA
 // نسخه ۳: مسیرها نسبی شدند تا در زیرپوشه (htdocs/faktorizm) هم کار کنند.
-const CACHE = 'faktorizm-v3';
+const CACHE = 'faktorizm-v8';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -18,6 +18,8 @@ self.addEventListener('fetch', (e) => {
   const { request } = e;
   if (request.method !== 'GET' || !request.url.startsWith(self.location.origin)) return;
   if (request.url.includes('/api/')) return; // داده زنده هرگز کش نمی‌شود
+  // خود سرویس‌ورک هرگز کش نمی‌شود؛ وگرنه نسخهٔ قدیمی برای همیشه می‌ماند
+  if (request.url.endsWith('/sw.js')) return;
 
   // ناوبری/HTML: اول شبکه، در آفلاین شِل برنامه
   if (request.mode === 'navigate') {

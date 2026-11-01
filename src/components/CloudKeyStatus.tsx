@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { KeyRound, ShieldCheck, AlertTriangle, RefreshCw, PlugZap, Loader2 } from 'lucide-react';
+import { KeyRound, ShieldCheck, AlertTriangle, RefreshCw, PlugZap, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Badge, Button } from '@/components/ui/primitives';
 import { useAppStore } from '@/lib/store';
 import { HAS_PRESET_KEY, keyStatus, restorePresetKey } from '@/lib/db';
@@ -15,11 +15,15 @@ import { toFaDigits } from '@/lib/utils';
  */
 export default function CloudKeyStatus() {
   const [probe, setProbe] = useState<{ state: 'idle' | 'busy' | 'ok' | 'fail'; message?: string }>({ state: 'idle' });
+  const [editing, setEditing] = useState(false);
+  const [showKey, setShowKey] = useState(true);
   const settings = useAppStore((st) => st.settings);
   const load = useAppStore((st) => st.load);
+  const set = useAppStore((st) => st.update);
   const info = providerInfo(settings.aiProvider);
   const status = keyStatus(settings);
   const cloudOn = settings.ocrEngine !== 'local';
+  const firstKey = keysOf(settings)[0] ?? '';
 
   const restore = async () => {
     const ok = await restorePresetKey();
@@ -72,13 +76,49 @@ export default function CloudKeyStatus() {
         )}
       </div>
 
-      {!status.hasKey && HAS_PRESET_KEY && (
+      {/* کادر کلید همیشه دیده می‌شود (حتی در حالت محلی). برای اینکه خودِ کلید در
+          سورس صفحه چاپ نشود، اولین نگاه فقط خلاصه را نشان می‌دهد و با یک کلیک
+          کامل و قابل ویرایش می‌شود. */}
+      {!editing ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-2 py-1.5">
+          <span className="text-[11px] font-mono text-muted-foreground" dir="ltr">
+            {status.hasKey
+              ? `${firstKey ? firstKey.slice(0, 3) : ''}••••${status.tail} · ${status.length} chars`
+              : 'no key yet'}
+          </span>
+          <Button size="sm" variant="outline" className="!h-7 !px-2 !text-[11px]"
+            onClick={() => { setEditing(true); setShowKey(true); }}>
+            <KeyRound size={11} /> {status.hasKey ? 'دیدن و ویرایش کلید' : 'ثبت کلید'}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-stretch gap-1.5">
+          <input
+            dir="ltr"
+            autoComplete="off"
+            spellCheck={false}
+            type={showKey ? 'text' : 'password'}
+            value={settings.aiKeys}
+            onChange={(e) => { void set({ aiKeys: e.target.value, aiProvider: 'ocrspace' }); }}
+            placeholder="کلید API را اینجا بگذارید…"
+            className="h-8 flex-1 rounded-lg border border-border bg-card px-2 text-[11px] font-mono outline-none focus:border-primary"
+          />
+          <Button size="sm" variant="outline" className="!h-8 !px-2 !text-[11px]" onClick={() => setShowKey((v) => !v)}>
+            {showKey ? <EyeOff size={11} /> : <Eye size={11} />}
+          </Button>
+          <Button size="sm" variant="outline" className="!h-8 !px-2 !text-[11px]" onClick={() => setEditing(false)}>
+            تمام
+          </Button>
+        </div>
+      )}
+
+      {HAS_PRESET_KEY && (
         <div className="flex items-center justify-between gap-2 rounded-lg bg-danger-soft/50 p-2">
-          <p className="text-[11px] text-danger leading-5">
-            این بسته کلید آماده دارد ولی روی این مرورگر ثبت نشده. یک کلیک کافی است.
+          <p className={`text-[11px] leading-5 ${status.hasKey ? 'text-muted-foreground' : 'text-danger'}`}>
+            {status.hasKey ? 'کلید آماده در برنامه هست؛ اگر کادر بالا خالی شد، همین دکمه آن را برمی‌گرداند.' : 'این بسته کلید آماده دارد ولی روی این مرورگر ثبت نشده. یک کلیک کافی است.'}
           </p>
           <Button size="sm" variant="outline" className="!h-8 !px-2 !text-[11px]" onClick={restore}>
-            <RefreshCw size={11} /> ثبت کلید آماده
+            <RefreshCw size={11} /> {status.hasKey ? 'بازگرداندن کلید آماده' : 'ثبت کلید آماده'}
           </Button>
         </div>
       )}
@@ -103,7 +143,7 @@ export default function CloudKeyStatus() {
       </div>
 
       <p className="text-[10px] text-muted-foreground leading-5">
-        {BUILD_LABEL} · اگر بعد از به‌روزرسانی بسته، نسخهٔ قبلی را می‌بینید، یک بار
+        {BUILD_LABEL} · اگر نسخهٔ قبلی را می‌بینید (این عدد عوض نشده)، یک بار
         <span className="font-bold"> Ctrl+Shift+R </span>
         بزنید (کش مرورگر). تعداد کلیدهای ثبت‌شده: {toFaDigits(status.hasKey ? 1 : 0)}
       </p>

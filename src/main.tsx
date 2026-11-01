@@ -57,6 +57,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     // مسیر نسبی تا در زیرپوشه‌هایی مثل htdocs/faktorizm هم درست ثبت شود
     const swUrl = new URL('sw.js', document.baseURI);
-    navigator.serviceWorker.register(swUrl).catch(() => undefined);
+    // updateViaCache:none ⇒ مرورگر خودِ sw.js را از کش HTTP نمی‌خواند؛
+    // بدون آن، کش ۳۰ روزهٔ Apache باعث می‌شد نسخهٔ قدیمی برنامه بماند.
+    navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' })
+      .then((reg) => reg.update().catch(() => undefined))
+      .catch(() => undefined);
   });
 }
