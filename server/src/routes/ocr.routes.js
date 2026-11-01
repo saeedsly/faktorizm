@@ -13,11 +13,11 @@ const OCR_PORT = process.env.OCR_PORT || '8789';
 const OCR_BASE = process.env.OCR_SERVICE_URL || `http://127.0.0.1:${OCR_PORT}`;
 const OCR_TIMEOUT_MS = Number(process.env.OCR_TIMEOUT_MS || 120000);
 
-async function forwardToPythonService(buffer, contentType) {
+async function forwardToPythonService(buffer, contentType, path = '/recognize') {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS);
   try {
-    const res = await fetch(`${OCR_BASE}/recognize`, {
+    const res = await fetch(`${OCR_BASE}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': contentType || 'application/octet-stream' },
       body: buffer,
@@ -68,12 +68,22 @@ router.post('/ocr/recognize', authenticate, async (req, res) => {
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
     return res.status(400).json({ success: false, error: { code: 'BAD_IMAGE', message: 'بدنه تصویر خالی است' } });
   }
+  // ?engine=falcon|ppocrv5|ppocrv6|auto  (برای صفحهٔ مقایسهٔ موتورها)
+  const engine = String(req.query.engine || '').slice(0, 24).replace(/[^a-z0-9-]/gi, '');
   try {
-    const { ok, json } = await forwardToPythonService(req.body, req.headers['content-type']);
+    const { ok, json } = await forwardToPythonService(
+      req.body,
+      req.headers['content-type'],
+      engine ? `/recognize?engine=${encodeURIComponent(engine)}` : '/recognize',
+    );
     if (!ok || !json.ok) {
+      const notReady = /آماده نیست|not ready|در دسترس نیست/i.test(String(json.error || ''));
       return res.status(502).json({
         success: false,
-        error: { code: 'OCR_ENGINE_ERROR', message: json.error || 'خطای موتور OCR' },
+        error: {
+          code: notReady ? 'ENGINE_NOT_READY' : 'OCR_ENGINE_ERROR',
+          message: json.error || 'خطای موتور OCR',
+        },
       });
     }
     return res.json({ success: true, data: json });

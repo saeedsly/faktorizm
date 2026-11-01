@@ -62,7 +62,6 @@ class RapidOcrEngine:
         params = {
             'Det.model_path': spec['det'],
             'Rec.model_path': spec['rec'],
-            'Rec.rec_keys_path': spec['keys'],
             # عرض بیشتر برای مبالغ بلند فاکتور تا رقم‌ها بریده نشوند
             'Rec.rec_img_shape': [3, 48, 640],
             'Det.limit_side_len': tuned['limit_side_len'],
@@ -72,6 +71,10 @@ class RapidOcrEngine:
             'Det.unclip_ratio': float(os.environ.get('OCR_DET_UNCLIP', '1.8')),
             'Global.log_level': 'error',
         }
+        # دیکشنری فقط وقتی هست که مدل به آن نیاز دارد (مدل چندزبانهٔ همراه
+        # بستهٔ rapidocr دیکشنری خودش را دارد)
+        if spec.get('keys'):
+            params['Rec.rec_keys_path'] = spec['keys']
         if spec.get('cls'):
             params['Cls.model_path'] = spec['cls']
         try:

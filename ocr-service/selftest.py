@@ -116,6 +116,12 @@ def main():
     # ---------------------------------------------------------- رجیستری موتور
     import engines
 
+    try:
+        import pipeline
+    except ImportError as exc:  # بدون numpy فقط آزمون‌های موتور رد می‌شوند
+        print(f'  (pipeline وارد نشد: {exc} — آزمون‌های وابسته رد شد)')
+        pipeline = None
+
     found = engines.available()
     check('فهرست موتورها لیست است', isinstance(found, list), True)
     engine = engines.select('ppocrv5')
@@ -132,7 +138,7 @@ def main():
     diag = engines.diagnostics()
     check('گزارش وضعیت کلیدهای لازم را دارد',
           {'engines', 'falcon', 'python', 'dictionary', 'files'} <= set(diag), True)
-    check('سه موتور در گزارش هست', len(diag['engines']), 3)
+    check('چهار موتور در گزارش هست', len(diag['engines']), 4)
     check('شمار واژه‌های واژه‌نامه در گزارش', diag['dictionary']['words'], 4984)
     check('هر موتور دلیل آماده‌نبودن دارد',
           all(e['ready'] or e.get('reason') for e in diag['engines']), True)
@@ -144,6 +150,12 @@ def main():
     check('پوشهٔ دانلود و شناسایی Falcon یکی است',
           download_models.FALCON_DIR, engines.falcon_status()['dir'])
     check('مسیرهای جایگزین Falcon بررسی می‌شوند', len(engines.FALCON_DIRS) >= 4, True)
+    check('موتور multi در فهرست است', any(e['id'] == 'ppocr-multi' for e in diag['engines']), True)
+    if pipeline is not None:
+        check('موتور فعال thread-local است (اجبار درخواست به بقیه نشت نمی‌کند)',
+              type(getattr(pipeline, '_tls', None)).__name__.endswith('local'), True)
+        check('پارامتر اجبار موتور در امضای recognize_bytes هست',
+              'engine_name' in pipeline.recognize_bytes.__code__.co_varnames, True)
     if not diag['falcon']['ready']:
         check('Falcon آماده نیست ولی دلیل دارد', bool(diag['falcon']['reason']), True)
 

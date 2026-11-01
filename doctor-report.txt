@@ -1,68 +1,16 @@
-faktorizm check report
-date: 2026-11-01T22:41:53.860Z
+faktorizm diagnose report
+date: 2026-11-01T23:17:40.074Z
 platform: linux x64
 node: v22.22.3
 root: /home/user/faktorizm
 
 
 ============================================================
-  فاکتوریزم — گزارش وضعیت
+  فاکتوریزم — عیب‌یابی سرویس موتور خواندن
 ============================================================
-  مسیر بسته      : /home/user/faktorizm
-  نسخهٔ رابط     : BYBE3hYU
-  Node           : v22.22.3 (linux)
-  web/index.html : نیست
-  server         : هست
-  وابستگی سرور   : هست
-  ocr-service    : هست
-  .venv پایتون   : ساخته نشده
-  پایتون سیستم   : python3.11
-  .env           : نیست
-  سرویس OCR      : روشن — PP-OCRv5 (arabic)
-  واژه‌نامه       : 4984 واژه
-    [--] falcon-ocr-arabic: وزن مدل در /home/user/faktorizm/ocr-service/models/falcon-ocr-arabic نیست (یک‌بار falcon-setup.bat را اجرا کنید)
-    [ok] ppocrv5-arabic: آماده
-    [ok] tesseract-browser: آماده
-  Faktorizm OCR - engine check
-  ==========================================================
-  
-  1) Python
-  [ok]  interpreter: /usr/bin/python3.11
-  [ok]  version: 3.11.2
-  [--]  onnxruntime  (needed for PP-OCR)  -> run setup.bat
-  [--]  rapidocr  (needed for PP-OCR)  -> run setup.bat
-  [--]  torch  (only needed for Falcon)
-  [--]  transformers  (only needed for Falcon)
-  
-  2) Model files
-  [ok]  folder: /home/user/faktorizm/ocr-service/models
-  [ok]  detector: PP-OCRv5_mobile_det.onnx
-  [ok]  arabic recognizer: arabic_PP-OCRv5_mobile_rec.onnx
-  [ok]  classifier: cls.onnx
-  [ok]  arabic keys: arabic_dict.txt
-  
-  3) Engines
-  [--]  Falcon-OCR-Arabic  [falcon-ocr-arabic]
-        reason: model weights missing in /home/user/faktorizm/ocr-service/models/falcon-ocr-arabic (run falcon-setup.bat once)
-  [--]  PP-OCR v5 (arabic)  [ppocrv5-arabic]
-        reason: onnxruntime is not installed
-  [ok]  Tesseract (browser)  [tesseract-browser]
-  
-  4) Falcon-OCR folder
-  [--]  /home/user/faktorizm/ocr-service/models/falcon-ocr-arabic
-  [!!]  model weights missing in /home/user/faktorizm/ocr-service/models/falcon-ocr-arabic (run falcon-setup.bat once)
-  
-  5) Persian dictionary
-  [ok]  4984 words loaded
-  
-  6) Selected engine
-  [--]  no strong engine - the app will fall back to Tesseract in the browser
-        reason: ModuleNotFoundError: No module named 'numpy'
-  
-  ==========================================================
-  RESULT: strong engine NOT ready.
-    - run setup.bat once (installs Python packages)
-    - then run start.bat (starts the service on port 8789)
-    - for Falcon run falcon-setup.bat (about 1.1 GB, one time)
+  پایتون محیط بسته : ساخته نشده
+  پایتون سیستم    : python3.11 (3.11)
+  پورت سرویس      : 8789
+  وضعیت زنده      : خاموش
 
-  این گزارش در فایل doctor-report.txt ذخیره شد.
+  [خطا] محیط پایتون نیست. اول: node tools/launch.mjs setup

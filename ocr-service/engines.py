@@ -34,7 +34,7 @@ DET_THRESH = float(os.environ.get('OCR_DET_THRESH', '0.20'))
 DET_BOX_THRESH = float(os.environ.get('OCR_DET_BOX_THRESH', '0.40'))
 DET_SIDE = int(os.environ.get('OCR_DET_SIDE', '1600'))
 
-PRIORITY = ['falcon', 'ppocrv6', 'ppocrv5']
+PRIORITY = ['falcon', 'ppocrv6', 'ppocrv5', 'multi']
 
 
 def _first_existing(patterns):
@@ -166,6 +166,36 @@ def detect_rapid(prefer_v6=True):
     }
 
 
+def detect_multi():
+    """
+    موتور سوم: همان تشخیص جعبه، ولی رکونایزر چندزبانهٔ همراه بستهٔ rapidocr.
+
+    چرا هست: رکونایزر فارسی روی خط‌های لاتین/عددی («SR-2401-118»، «ThinkPad E14»)
+    ضعیف است. این موتور هیچ دانلودی لازم ندارد (فایل داخل بستهٔ rapidocr است) و
+    در «آزمایشگاه خوانش» می‌شود مستقیم با PP-OCR عربی مقایسه‌اش کرد.
+    """
+    det = _det_paths()
+    if not det or not _has_module('rapidocr'):
+        return None
+    try:
+        import rapid as _rapid  # noqa: WPS433
+
+        rec = _rapid.find_multi_rec()
+    except Exception:  # noqa: BLE001
+        rec = None
+    if not rec:
+        return None
+    return {
+        'id': 'ppocr-multi',
+        'label': 'PP-OCR multi (لاتین/انگلیسی)',
+        'det': det,
+        'rec': rec,
+        'keys': None,
+        'cls': _cls_path(),
+        'kind': 'rapid',
+    }
+
+
 def _wrap(spec):
     """ساخت شیء موتور از مشخصات."""
     if spec is None:
@@ -190,6 +220,9 @@ def available():
     v5 = detect_rapid(prefer_v6=False)
     if v5:
         found.append({'id': v5['id'], 'label': v5['label'], 'ready': True})
+    multi = detect_multi()
+    if multi:
+        found.append({'id': multi['id'], 'label': multi['label'], 'ready': True})
     return found
 
 
@@ -229,6 +262,11 @@ def select(preferred=None):
                 spec = detect_rapid(prefer_v6=False)
                 if spec is None:
                     last_error = 'PP-OCRv5 در دسترس نیست (فایل onnx یا rapidocr نیست)'
+                    continue
+            elif name in ('multi', 'ppocr-multi'):
+                spec = detect_multi()
+                if spec is None:
+                    last_error = 'موتور multi در دسترس نیست (بستهٔ rapidocr بدون رکونایزر چندزبانه)'
                     continue
             else:
                 last_error = f'موتور ناشناخته: {name}'
@@ -311,6 +349,14 @@ def diagnostics():
             'reason': rapid_reason,
             'reasonEn': rapid_reason_en,
             'hint': 'موتور محلی پیشنهادی: تشخیص جعبه + رکونایزر عربی PP-OCRv5',
+        },
+        {
+            'id': 'ppocr-multi',
+            'label': 'PP-OCR multi (لاتین/انگلیسی)',
+            'ready': bool(detect_multi()),
+            'reason': None if detect_multi() else 'رکونایزر چندزبانهٔ rapidocr پیدا نشد',
+            'reasonEn': None if detect_multi() else 'rapidocr multilingual recognizer not found',
+            'hint': 'برای فاکتورهای لاتین/انگلیسی بهتر است؛ برای فارسی، PP-OCR عربی را انتخاب کنید',
         },
         {
             'id': 'tesseract-browser',

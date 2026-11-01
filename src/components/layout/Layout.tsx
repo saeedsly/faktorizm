@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard, ScanLine, ReceiptText, ContactRound, Package, BarChart3, KeyRound,
-  ScrollText, Sparkles, Settings as SettingsIcon, Menu, Search, Plus, Moon, Sun,
+  ScrollText, Sparkles, Settings as SettingsIcon, Menu, Search, Plus, Moon, Sun, FlaskConical,
   Keyboard, ChevronLeft, ShieldCheck, LogOut, UsersRound, Crown, LifeBuoy,
   RefreshCcw, CloudOff, CheckCircle2, Loader2, Info,
 } from 'lucide-react';
@@ -53,6 +53,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/features', icon: Sparkles, label: '۸۹ ویژگی' },
       { to: '/about', icon: Info, label: 'درباره سازنده' },
+      { to: '/engine-lab', icon: FlaskConical, label: 'آزمایشگاه خوانش' },
       { to: '/settings', icon: SettingsIcon, label: 'تنظیمات' },
     ],
   },

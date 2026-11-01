@@ -25,6 +25,7 @@ import ApiCenter from './pages/ApiCenter';
 import ActivityLog from './pages/ActivityLog';
 import Features from './pages/Features';
 import SettingsPage from './pages/Settings';
+import EngineLab from '@/pages/EngineLab';
 import NotFound from './pages/NotFound';
 import UsersAdmin from './pages/admin/Users';
 import SubscriptionPage from './pages/Subscription';
@@ -124,6 +125,7 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route path="/features" element={<Features />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/engine-lab" element={<EngineLab />} />
           <Route path="/activity" element={<ActivityLog />} />
 
           {/* بخش‌های کاری — هنگام انقضای اشتراک قفل می‌شوند */}

@@ -32,8 +32,18 @@ export default function CloudKeyStatus() {
     else toast.error('کلید آماده‌ای در این بسته نیست');
   };
 
+  const keyHint = (() => {
+    const key = keysOf(settings)[0] ?? '';
+    if (!key) return 'کلیدی ثبت نشده است.';
+    if (settings.aiProvider === 'ocrspace' && key.length !== 36) {
+      return `کلید ${key.length} نویسه است؛ کلیدهای OCR.Space ۳۶ نویسه‌اند — احتمالاً کپی ناقص است.`;
+    }
+    return '';
+  })();
+
   const runProbe = async () => {
     setProbe({ state: 'busy' });
+    await set({ aiAskEachTime: false });
     const res = await testAiConnection({
       provider: settings.aiProvider,
       apiKey: keysOf(settings)[0] ?? '',
@@ -136,11 +146,22 @@ export default function CloudKeyStatus() {
           </span>
         )}
         {probe.state === 'fail' && (
-          <span className="text-[11px] font-bold text-danger">
-            {probe.message || 'کلید یا اتصال مشکل دارد'}
-          </span>
+          <div className="w-full space-y-1">
+            <p className="text-[11px] font-bold text-danger leading-6">
+              {probe.message || 'کلید یا اتصال مشکل دارد'}
+            </p>
+            <p className="text-[10px] text-muted-foreground leading-5">
+              اگر مرورگر به سرویس ابری دسترسی ندارد، برنامه خودکار از مسیر سرور محلی
+              (<span dir="ltr">/api/v2/ocr/cloud</span>) استفاده می‌کند؛ آن مسیر نیاز دارد
+              برنامه با <span dir="ltr">start.bat</span> اجرا شده باشد.
+            </p>
+          </div>
         )}
       </div>
+
+      {keyHint && (
+        <p className="text-[10px] leading-5 text-danger">{keyHint}</p>
+      )}
 
       <p className="text-[10px] text-muted-foreground leading-5">
         {BUILD_LABEL} · اگر نسخهٔ قبلی را می‌بینید (این عدد عوض نشده)، یک بار

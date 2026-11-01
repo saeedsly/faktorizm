@@ -17,6 +17,7 @@
 """
 import io
 import os
+import threading
 import time
 
 import numpy as np
@@ -40,9 +41,18 @@ GOOD_ENOUGH = float(os.environ.get('OCR_GOOD_ENOUGH', '0.87'))
 _engine = None
 
 
+# موتور اجبارشده برای همین درخواست (صفحهٔ «مقایسهٔ موتورها»). قبلاً توابع
+# داخلی همیشه get_engine() صدا می‌زدند و اجبار موتور نادیده گرفته می‌شد؛ نتیجه
+# اینکه هر دو موتور خروجی یکسان می‌دادند.
+_tls = threading.local()
+
+
 def get_engine():
     """موتور فعال (خودکار انتخاب می‌شود؛ یک‌بار بارگذاری و کش می‌شود)."""
     global _engine
+    forced = getattr(_tls, 'engine', None)
+    if forced is not None:
+        return forced
     if _engine is None:
         _engine = select()
     return _engine
@@ -622,117 +632,144 @@ def _score(lines):
     return mean * (0.6 + 0.4 * coverage)
 
 
-def recognize_bytes(image_bytes, use_variants=True):
-    """
-    خوانش کامل: نسخه‌های تصویر به ترتیب کیفیت، توقف زودهنگام، بازخوانی هدفمند و
-    در پایان لایهٔ تأیید (validate.py) که تعیین می‌کند خروجی قابل‌اعتماد است یا نه.
-    """
-    started = time.perf_counter()
-    engine = get_engine()
-    if engine is None:
-        raise RuntimeError(selection_error() or 'OCR engine not ready')
-    info = engine_info()
-    plan, angle, image_stats = build_variant_plan(image_bytes)
-    need = 1 if not use_variants else len(plan)
-    if abs(angle) < 0.6:
-        plan = [(n, f) for n, f in plan if 'کجی' not in n]
+def recognize_bytes(image_bytes, use_variants=True, engine_name=None):
+    try:
+        """
+        خوانش کامل: نسخه‌های تصویر به ترتیب کیفیت، توقف زودهنگام، بازخوانی هدفمند و
+        در پایان لایهٔ تأیید (validate.py) که تعیین می‌کند خروجی قابل‌اعتماد است یا نه.
 
-    # موتورهای سرتاسری (Falcon) خودشان ساختار سند را می‌فهمند؛ ترکیب چند نسخه
-    # فقط هزینه است، پس یک نسخهٔ تیز می‌خوانند.
-    end_to_end = getattr(engine, 'kind', 'rapid') != 'rapid'
-    if end_to_end:
-        plan = [(n, f) for n, f in plan if n == 'تیز'] or plan[:1]
-    else:
-        # ترتیب نسخه‌ها در build_variant_plan تعیین می‌شود؛ «اصل» آخرین راه است
-        plan = [(n, f) for n, f in plan if n != 'اصل'] or plan[:1]
-        # سقف زمان: حداکثر سه نسخه برای هر تصویر
-        plan = plan[:2]
+        engine_name: برای «مقایسهٔ موتورها» — می‌شود یک موتور خاص را اجبار کرد
+        (falcon | ppocrv5 | ppocrv6 | auto). بدون آن، همان انتخاب خودکار.
+        """
+        started = time.perf_counter()
+        if engine_name:
+            import engines as _engines  # noqa: WPS433 — فقط برای اجبار موتور
 
-    results = []
-    trace = []
-    engine_meta = {}
-    for name, make in plan[:need]:
-        variant = make()
-        try:
-            if end_to_end:
-                raw_rows, engine_meta = engine.recognize(variant)
-                items = [_to_item(box, text, score) for text, score, box in raw_rows]
-            else:
-                items = recognize_items(variant)
-        except Exception as exc:  # noqa: BLE001 — موتور بعدی/نسخه بعدی
-            trace.append((name, 'خطا', f'{type(exc).__name__}: {exc}'))
-            continue
-        lines = reconstruct_rows(items)
-        score = _score(lines)
-        if end_to_end and engine_meta.get('confidence'):
-            # امتیاز واقعی مدل، نه برآورد از پوشش نویسه
-            score = min(score, float(engine_meta['confidence']) * 1.05) \
-                if score else float(engine_meta['confidence'])
-        trace.append((name, round(score, 3), len(items)))
-        results.append({'name': name, 'items': items, 'lines': lines, 'score': score, 'image': variant})
-        if score >= GOOD_ENOUGH:
-            break
+            engine = _engines.select(engine_name)
+            if engine is None:
+                raise RuntimeError(_engines.selection_error() or f'موتور {engine_name} آماده نیست')
+            # موتور اجبارشده در همین رشته معتبر است؛ بقیهٔ درخواست‌ها دست‌نخورده می‌مانند
+            _tls.engine = engine
+        else:
+            engine = get_engine()
+        if engine is None:
+            raise RuntimeError(selection_error() or 'OCR engine not ready')
+        info = engine_info()
+        plan, angle, image_stats = build_variant_plan(image_bytes)
+        need = 1 if not use_variants else len(plan)
+        if abs(angle) < 0.6:
+            plan = [(n, f) for n, f in plan if 'کجی' not in n]
 
-    if not results:
-        empty = {
-            'lines': [], 'text': '', 'confidence': 0, 'elapsedMs': round((time.perf_counter() - started) * 1000),
-            'variant': '-', 'skew': angle, 'variants': trace, 'items': [], 'totals': {},
-            'engine': info,
-        }
-        return validate(empty)
+        # موتورهای سرتاسری (Falcon) خودشان ساختار سند را می‌فهمند؛ ترکیب چند نسخه
+        # فقط هزینه است، پس یک نسخهٔ تیز می‌خوانند.
+        end_to_end = getattr(engine, 'kind', 'rapid') != 'rapid'
+        if end_to_end:
+            plan = [(n, f) for n, f in plan if n == 'تیز'] or plan[:1]
+        else:
+            # ترتیب نسخه‌ها در build_variant_plan تعیین می‌شود؛ «اصل» آخرین راه است
+            plan = [(n, f) for n, f in plan if n != 'اصل'] or plan[:1]
+            # سقف زمان: حداکثر سه نسخه برای هر تصویر
+            plan = plan[:2]
 
-    results.sort(key=lambda r: r['score'], reverse=True)
-    best = results[0]
+        results = []
+        trace = []
+        engine_meta = {}
+        for name, make in plan[:need]:
+            variant = make()
+            try:
+                if end_to_end:
+                    raw_rows, engine_meta = engine.recognize(variant)
+                    items = [_to_item(box, text, score) for text, score, box in raw_rows]
+                else:
+                    items = recognize_items(variant)
+            except Exception as exc:  # noqa: BLE001 — موتور بعدی/نسخه بعدی
+                trace.append((name, 'خطا', f'{type(exc).__name__}: {exc}'))
+                continue
+            lines = reconstruct_rows(items)
+            score = _score(lines)
+            if end_to_end and engine_meta.get('confidence'):
+                # امتیاز واقعی مدل، نه برآورد از پوشش نویسه
+                score = min(score, float(engine_meta['confidence']) * 1.05) \
+                    if score else float(engine_meta['confidence'])
+            trace.append((name, round(score, 3), len(items)))
+            results.append({'name': name, 'items': items, 'lines': lines, 'score': score, 'image': variant})
+            if score >= GOOD_ENOUGH:
+                break
 
-    if not end_to_end:
-        # بازخوانی هدفمند: فقط جعبه‌های کم‌اطمینان (اکثر تصاویر به این مرحله نیاز ندارند)
-        weak = [i for i in best['items'] if i['score'] < 0.86]
-        if weak:
-            best['items'], improved = reread_items(best['image'], best['items'])
-            if improved:
+        if not results:
+            empty = {
+                'lines': [], 'text': '', 'confidence': 0, 'elapsedMs': round((time.perf_counter() - started) * 1000),
+                'variant': '-', 'skew': angle, 'variants': trace, 'items': [], 'totals': {},
+                'engine': info,
+            }
+            return validate(empty)
+
+        results.sort(key=lambda r: r['score'], reverse=True)
+        best = results[0]
+
+        if not end_to_end:
+            # بازخوانی هدفمند: فقط جعبه‌های کم‌اطمینان (اکثر تصاویر به این مرحله نیاز ندارند)
+            weak = [i for i in best['items'] if i['score'] < 0.86]
+            if weak:
+                best['items'], improved = reread_items(best['image'], best['items'])
+                if improved:
+                    lines = reconstruct_rows(best['items'])
+                    if _score(lines) >= best['score'] * 0.98:
+                        best = dict(best, lines=lines, name=best['name'] + '+بازخوانی')
+                        trace.append(('بازخوانی', round(_score(lines), 3), improved))
+
+            # خوانش دوم با رکونایزر چندزبانه: خط‌های عددی و لاتین
+            best['items'], extra_fixes = apply_second_opinions(best['image'], best['items'])
+            if extra_fixes:
                 lines = reconstruct_rows(best['items'])
                 if _score(lines) >= best['score'] * 0.98:
-                    best = dict(best, lines=lines, name=best['name'] + '+بازخوانی')
-                    trace.append(('بازخوانی', round(_score(lines), 3), improved))
+                    best = dict(best, lines=lines, name=best['name'] + '+خوانش‌دوم')
+                    trace.append(('خوانش‌دوم', round(_score(lines), 3), extra_fixes))
 
-        # خوانش دوم با رکونایزر چندزبانه: خط‌های عددی و لاتین
-        best['items'], extra_fixes = apply_second_opinions(best['image'], best['items'])
-        if extra_fixes:
-            lines = reconstruct_rows(best['items'])
-            if _score(lines) >= best['score'] * 0.98:
-                best = dict(best, lines=lines, name=best['name'] + '+خوانش‌دوم')
-                trace.append(('خوانش‌دوم', round(_score(lines), 3), extra_fixes))
+            # اگر هنوز ضعیف است، نسخه دیگر ترکیب می‌شود (نه جایگزین)
+            if len(results) > 1:
+                runner = results[1]
+                if best['score'] < GOOD_ENOUGH and runner['score'] >= best['score'] * 0.94:
+                    fused = fuse_items([best['items'], runner['items']])
+                    merged = reconstruct_rows(fused)
+                    if _score(merged) >= best['score'] * 0.99:
+                        best = dict(best, lines=merged, name=f"{best['name']}+{runner['name']}")
 
-        # اگر هنوز ضعیف است، نسخه دیگر ترکیب می‌شود (نه جایگزین)
-        if len(results) > 1:
-            runner = results[1]
-            if best['score'] < GOOD_ENOUGH and runner['score'] >= best['score'] * 0.94:
-                fused = fuse_items([best['items'], runner['items']])
-                merged = reconstruct_rows(fused)
-                if _score(merged) >= best['score'] * 0.99:
-                    best = dict(best, lines=merged, name=f"{best['name']}+{runner['name']}")
+        lines = best['lines']
+        text = '\n'.join(line['text'] for line in lines)
 
-    lines = best['lines']
-    text = '\n'.join(line['text'] for line in lines)
-
-    # فهم ساختار جدول از موقعیت خانه‌ها (مستقل از قالب هر فاکتور)
-    structured_items, totals = extract_items(best['items'])
-    total_chars = max(sum(len(line['text']) for line in lines), 1)
-    confidence = round(
-        sum(line['confidence'] * max(len(line['text']), 1) for line in lines) / total_chars * 100, 1)
-    result = {
-        'lines': lines,
-        'text': text,
-        'confidence': confidence,
-        'elapsedMs': round((time.perf_counter() - started) * 1000),
-        'variant': best['name'],
-        'skew': angle,
-        'variants': trace,
-        'items': structured_items,
-        'totals': totals,
-        'engine': info,
-        'preprocess': image_stats,
-    }
-    if engine_meta:
-        result['engineMeta'] = {k: v for k, v in engine_meta.items() if k != 'raw'}
-    return validate(result)
+        # فهم ساختار جدول از موقعیت خانه‌ها (مستقل از قالب هر فاکتور)
+        structured_items, totals = extract_items(best['items'])
+        total_chars = max(sum(len(line['text']) for line in lines), 1)
+        confidence = round(
+            sum(line['confidence'] * max(len(line['text']), 1) for line in lines) / total_chars * 100, 1)
+        result = {
+            'lines': lines,
+            'text': text,
+            'confidence': confidence,
+            'elapsedMs': round((time.perf_counter() - started) * 1000),
+            'variant': best['name'],
+            'skew': angle,
+            'variants': trace,
+            'items': structured_items,
+            'totals': totals,
+            'engine': info,
+            'preprocess': image_stats,
+        }
+        if engine_meta:
+            result['engineMeta'] = {k: v for k, v in engine_meta.items() if k != 'raw'}
+        validated = validate(result)
+        # موتور چندزبانه (multi) روی متن فارسی ضعیف است: هرگز «تأییدشده» نشود،
+        # وگرنه اطمینان بالایش کاربر را گمراه می‌کند.
+        if (info or {}).get('id') == 'ppocr-multi':
+            verification = dict(validated.get('verification') or {})
+            verification['status'] = 'review'
+            verification['flags'] = list(dict.fromkeys([*(verification.get('flags') or []), 'latin_only']))
+            verification['notes'] = [
+                'این موتور برای متن لاتین/انگلیسی بهینه است؛ برای فاکتور فارسی «PP-OCR عربی» را انتخاب کنید.',
+                *(verification.get('notes') or []),
+            ]
+            validated['verification'] = verification
+        return validated
+    finally:
+        _tls.engine = None

@@ -18,6 +18,7 @@ import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 import engines
 from pipeline import engine_error, engine_info, get_engine, recognize_bytes
@@ -27,12 +28,15 @@ PORT = int(os.environ.get('OCR_PORT', '8789'))
 MAX_BODY = 25 * 1024 * 1024  # حداکثر ۲۵ مگابایت برای هر تصویر
 
 
-def recognize(image_bytes):
+def recognize(image_bytes, engine_name=None):
     """خوانش کامل تصویر با خط لوله چندنسخه‌ای (پیش‌پردازش + ترکیب + بازخوانی)."""
-    if get_engine() is None:
+    if engine_name and engine_name != 'auto':
+        # اجبار موتور برای صفحهٔ «مقایسهٔ موتورها»؛ اگر آماده نباشد خطای روشن
+        pass
+    elif get_engine() is None:
         raise RuntimeError(engine_error() or 'OCR engine not ready')
     started = time.perf_counter()
-    result = recognize_bytes(image_bytes)
+    result = recognize_bytes(image_bytes, engine_name=engine_name)
     result['elapsedMs'] = round((time.perf_counter() - started) * 1000)
     return result
 
@@ -71,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
                 'engine': info.get('label'),
                 'engineId': info.get('id'),
                 'engines': engines.available(),
+                'comparable': [e['id'] for e in engines.diagnostics()['engines'] if e['ready']],
                 'diagnostics': engines.diagnostics(),
                 'pipeline': 'auto-engine + multi-variant + reread + rtl-reconstruct',
                 'validation': {
@@ -83,7 +88,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {'ok': False, 'error': 'not found'})
 
     def do_POST(self):
-        if self.path.split('?')[0] != '/recognize':
+        parsed = urlparse(self.path)
+        if parsed.path != '/recognize':
             self._send(404, {'ok': False, 'error': 'not found'})
             return
         try:
@@ -100,7 +106,9 @@ class Handler(BaseHTTPRequestHandler):
                     return
             else:
                 image = body  # خام image/png | image/jpeg
-            payload = recognize(image)
+            params = parse_qs(parsed.query)
+            engine_name = (params.get('engine') or [''])[0] or None
+            payload = recognize(image, engine_name)
             self._send(200, {'ok': True, **payload})
         except Exception as exc:  # noqa: BLE001
             self._send(500, {'ok': False, 'error': f'{type(exc).__name__}: {exc}'})
