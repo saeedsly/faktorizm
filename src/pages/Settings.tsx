@@ -5,6 +5,7 @@ import {
   Trash2, Moon, Sun, GraduationCap, RotateCcw,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
+import CloudKeyStatus from '@/components/CloudKeyStatus';
 import { Card, CardTitle, Input, Select, Label, Button, Switch, Badge } from '@/components/ui/primitives';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useAppStore } from '@/lib/store';
@@ -176,6 +177,8 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+
+            <CloudKeyStatus />
 
             {s.ocrEngine !== 'local' && (
               <div className="space-y-3 rounded-xl border border-border p-3.5">

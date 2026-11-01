@@ -64,7 +64,48 @@ export const db = new FaktorizmDB();
  * می‌نشیند (همان جایی که کلید دستی هم می‌نشست) و به هیچ سروری فرستاده نمی‌شود.
  * برای بسته‌های عمومی، `PRESET_KEY` را خالی کنید.
  */
-const PRESET_KEY = 'K8752522415505188957';
+export const PRESET_KEY = 'K8752522415505188957';
+
+/** کلید آماده آیا در دسترس است؟ */
+export const HAS_PRESET_KEY = PRESET_KEY.length >= 15;
+
+/**
+ * بازیابی کلید آماده — برای دکمهٔ «بازگرداندن کلید آماده» در تنظیمات.
+ * فقط کلید و سرویس/مدل را می‌نویسد؛ بقیهٔ تنظیم‌های کاربر دست‌نخورده می‌ماند.
+ */
+export async function restorePresetKey(): Promise<boolean> {
+  if (!HAS_PRESET_KEY) return false;
+  const current = await getSettings();
+  const next = normalizeSettings({
+    ...current,
+    aiProvider: 'ocrspace',
+    aiKeys: PRESET_KEY,
+    aiApiKey: '',
+    aiModel: current.aiModel?.trim() || 'ara',
+    aiBaseUrl: 'https://api.ocr.space',
+    ocrEngine: current.ocrEngine === 'local' ? 'ai' : current.ocrEngine,
+  });
+  await db.settings.put(next);
+  return true;
+}
+
+/** وضعیت کلید برای نمایش در رابط کاربری (بدون چاپ خودِ کلید) */
+export function keyStatus(settings: AppSettings): {
+  hasKey: boolean;
+  isPreset: boolean;
+  tail: string;
+  length: number;
+} {
+  const keys = (settings.aiKeys ?? '')
+    .split(/[\n,;]+/).map((k) => k.trim()).filter((k) => k.length >= 8);
+  const first = keys[0] ?? (settings.aiApiKey ?? '').trim();
+  return {
+    hasKey: first.length >= 8,
+    isPreset: HAS_PRESET_KEY && keys.includes(PRESET_KEY),
+    tail: first.length >= 4 ? first.slice(-4) : '',
+    length: first.length,
+  };
+}
 
 const PRESET: Partial<AppSettings> = PRESET_KEY
   ? {
@@ -133,7 +174,10 @@ export async function getSettings(): Promise<AppSettings> {
   const settings = normalizeSettings(stored);
   // نصب تازه/تنظیمات قبلی بدون کلید: پروفایل آماده فقط کلید و موتور را پر می‌کند
   // و انتخاب‌های دیگر کاربر (تم، نرخ مالیات، نام کسب‌وکار) را دست نمی‌زند.
-  if (PRESET_KEY && !(settings.aiKeys ?? '').trim() && !(settings.aiApiKey ?? '').trim()) {
+  const storedKeys = `${settings.aiKeys ?? ''}`.split(/[\n,;]+/).map((k) => k.trim()).filter((k) => k.length >= 8);
+  const storedSingle = (settings.aiApiKey ?? '').trim();
+  const usableStored = storedKeys.length > 0 || storedSingle.length >= 8;
+  if (PRESET_KEY && !usableStored) {
     settings.aiKeys = PRESET_KEY;
     settings.aiProvider = 'ocrspace';
     settings.aiModel = settings.aiModel || 'ara';
