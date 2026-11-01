@@ -30,7 +30,15 @@ async function buildWorker(langs: string, onProgress?: ProgressCb): Promise<Work
     return await createWorker(langs, 1, options);
   } catch (err) {
     console.warn('[ocr] مسیر پوشه هسته شکست خورد، تلاش با فایل مستقیم…', err);
-    return createWorker(langs, 1, { ...options, corePath: CORE_FILE });
+    try {
+      return await createWorker(langs, 1, { ...options, corePath: CORE_FILE });
+    } catch (coreErr) {
+      // بستهٔ سبک فقط زبان فارسی را همراه دارد؛ اگر زبان دوم موجود نبود،
+      // به‌جای از کار افتادنِ کامل موتور محلی، با فارسی ادامه می‌دهیم.
+      if (!langs.includes('+')) throw coreErr;
+      console.warn('[ocr] زبان دوم در دسترس نیست؛ خوانش با فارسی ادامه می‌یابد', coreErr);
+      return createWorker('fas', 1, { ...options, corePath: CORE_FILE });
+    }
   }
 }
 
