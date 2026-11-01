@@ -43,6 +43,8 @@ export default function Login() {
         حساب ندارید؟ <Link to="/auth/register" className="text-primary font-bold">ساخت حساب جدید</Link>
         <span className="mx-2">·</span>
         <Link to="/auth/forgot" className="text-primary font-bold">فراموشی رمز</Link>
+        <span className="mx-2">·</span>
+        <a href="/download.html" className="text-primary font-bold">دانلود بستهٔ نصبی</a>
       </>}
     >
       <form onSubmit={submit} className="space-y-4">

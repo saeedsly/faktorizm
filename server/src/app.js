@@ -85,6 +85,13 @@ export function createApp() {
   app.use('/api/v2/business', businessRoutes);
   app.use('/api/v2/audit', auditRoutes);
 
+  // فایل‌های نصبی (زیپ بسته‌ها) روی همان پورت؛ برای محیط‌هایی که دسترسی به
+  // سایت‌های بیرونی ندارند. مسیر با DOWNLOAD_DIR تعیین می‌شود.
+  const downloadDir = process.env.DOWNLOAD_DIR ? resolve(process.cwd(), process.env.DOWNLOAD_DIR) : '';
+  if (downloadDir && existsSync(downloadDir)) {
+    app.use('/downloads', express.static(downloadDir, { index: false, maxAge: 0 }));
+  }
+
   // سرو فرانت build‌شده روی همان پورت سرور (حالت تک‌سرویس در استقرار نهایی)
   const webDir = process.env.WEB_DIR ? resolve(process.cwd(), process.env.WEB_DIR) : '';
   if (webDir && existsSync(join(webDir, 'index.html'))) {

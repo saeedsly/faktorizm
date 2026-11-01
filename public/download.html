@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دانلود بستهٔ نصبی — فاکتوریزم</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 20px 64px;
+    font-family: Vazirmatn, "Segoe UI", Tahoma, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #1e2a55 0%, #0b1020 55%, #080c18 100%);
+    color: #e8ecf6; min-height: 100vh;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 8px; }
+  .sub { color: #93a1bd; font-size: 14px; line-height: 2; margin: 0 0 26px; }
+  a.card {
+    display: block; text-decoration: none; color: inherit;
+    background: linear-gradient(180deg, #161f3a, #131a2f);
+    border: 1px solid #26304d; border-radius: 16px;
+    padding: 18px 20px; margin-bottom: 14px; transition: .15s;
+  }
+  a.card:hover { border-color: #4f7cff; transform: translateY(-1px); box-shadow: 0 10px 30px -12px #4f7cff88; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .t { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .d { color: #93a1bd; font-size: 13px; line-height: 1.9; }
+  .size { flex: none; background: #1b2b52; color: #8fb0ff; border: 1px solid #2d4373;
+          font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; }
+  .tag { display: inline-block; font-size: 11px; color: #7ee0a8; background: #12301f;
+         border: 1px solid #1e5236; border-radius: 6px; padding: 1px 7px; margin-inline-start: 6px; }
+  .note { margin-top: 26px; color: #6b7896; font-size: 12px; line-height: 2.1; }
+  .note b { color: #93a1bd; }
+  ol { color: #93a1bd; font-size: 13px; line-height: 2.2; padding-inline-start: 18px; }
+  .btn { display: inline-block; margin-top: 10px; background: #4f7cff; color: #fff;
+         text-decoration: none; padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>دانلود بستهٔ نصبی فاکتوریزم</h1>
+  <p class="sub">
+    این فایل‌ها روی همین سرور آماده شده‌اند و بدون نیاز به هیچ سایت بیرونی دانلود می‌شوند.
+    هر کارت را بزنید تا فایل مستقیماً ذخیره شود.
+  </p>
+
+  <a class="card" href="/downloads/faktorizm-xampp.zip" download>
+    <div class="row">
+      <div>
+        <div class="t">بستهٔ کامل — ویندوز ۱۰/۱۱ <span class="tag">توصیه‌شده</span></div>
+        <div class="d">Node + MySQL + موتور OCR آفلاین، رابط آماده، راهنمای نصب گام‌به‌گام</div>
+      </div>
+      <span class="size" data-size-for="/downloads/faktorizm-xampp.zip">…</span>
+    </div>
+  </a>
+
+  <a class="card" href="/downloads/faktorizm-htdocs.zip" download>
+    <div class="row">
+      <div>
+        <div class="t">بستهٔ سبک — ویندوز ۷ یا فقط مرورگر</div>
+        <div class="d">بدون Node؛ در پوشهٔ htdocs بگذارید و از مرورگر باز کنید</div>
+      </div>
+      <span class="size" data-size-for="/downloads/faktorizm-htdocs.zip">…</span>
+    </div>
+  </a>
+
+  <div class="note">
+    <b>نصب سریع بستهٔ کامل:</b>
+    <ol>
+      <li>زیپ را در مسیری ساده و بدون حروف فارسی Extract کنید (مثلاً <code>C:\faktorizm-xampp</code>).</li>
+      <li>XAMPP را باز کنید و مقابل <b>MySQL</b> دکمهٔ Start را بزنید.</li>
+      <li>Node.js LTS و Python 3.11 را نصب کنید (هنگام نصب پایتون تیک <b>Add python.exe to PATH</b>).</li>
+      <li><code>setup.bat</code> را اجرا کنید و صبر کنید تا «نصب کامل شد» بیاید.</li>
+      <li><code>start.bat</code> را اجرا کنید؛ مرورگر روی <code>http://localhost:8787</code> باز می‌شود.</li>
+    </ol>
+    <a class="btn" href="/downloads/README.md">راهنمای کامل نصب</a>
+  </div>
+</div>
+
+<script src="/download.js" defer></script>
+</body>
+</html>
