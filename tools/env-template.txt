@@ -1,0 +1,27 @@
+PORT=8787
+NODE_ENV=production
+
+# memory = no MySQL needed (data resets after restart, good for a test)
+# mysql  = use the database of XAMPP / MySQL
+DB_DRIVER=memory
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=faktorizm
+
+WEB_DIR=./web
+DATA_DIR=./data
+
+ADMIN_EMAIL=admin@faktorizm.ir
+ADMIN_PASSWORD=Admin@1405
+
+JWT_SECRET=change-this-jwt-secret-0123456789abcdefghij
+REFRESH_SECRET=change-this-refresh-secret-0123456789ab
+
+CORS_ORIGINS=http://localhost:8787,http://127.0.0.1:8787
+
+# local OCR service (launch.mjs starts it)
+OCR_SERVICE_URL=http://127.0.0.1:8789
+OCR_PORT=8789
+OCR_ENGINE=auto

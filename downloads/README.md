@@ -1,10 +1,10 @@
 # بسته نصب فاکتوریزم
 
-سه گزینه برای تست — همه با نسخهٔ تازه با رفع خطای E201 (`BUILD 2026-11-02-engines`).
+سه گزینه برای تست — همه با نسخهٔ تازه با رفع خطای E201 (`BUILD 2026-11-02-launcher`).
 
 ## گزینهٔ ۱ — اجرا با Node.js (بدون XAMPP)
 
-**فایل:** `faktorizm-node.zip` (۲۳٫۶ مگابایت — شامل سرویس OCR محلی)
+**فایل:** `faktorizm-node.zip` (۲۰٫۵ مگابایت — شامل سرویس OCR محلی و راه‌انداز آزمون‌شده)
 **دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
 **دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
 
@@ -20,7 +20,7 @@
 
 ## گزینهٔ ۲ — نصب روی XAMPP (Apache + MySQL + Node)
 
-**فایل:** `faktorizm-xampp.zip` (۲۰٫۳ مگابایت — شامل سرویس OCR محلی)
+**فایل:** `faktorizm-xampp.zip` (۱۷ مگابایت — شامل سرویس OCR محلی)
 **دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
 **دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
 
@@ -33,8 +33,8 @@
 
 ## گزینهٔ ۳ (سبک، فقط Apache / ویندوز ۷) — بدون Node
 
-**فایل:** `faktorizm-htdocs-slim-v6.zip` (۴ مگابایت)
-**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs-slim-v6.zip
+**فایل:** `faktorizm-htdocs-slim-v7.zip` (۴ مگابایت)
+**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs-slim-v7.zip
 
 محتوای پوشهٔ `faktorizm` را در `C:\xampp\htdocs\` بریزید و Apache را روشن کنید → `http://localhost/faktorizm/`
 داده‌ها در IndexedDB همان دستگاه می‌مانند.
@@ -43,12 +43,23 @@
 ## اگر کلید در تنظیمات دیده نشد (رفع در این نسخه)
 
 1. تنظیمات را باز کنید؛ بالای کارت «خوانش ابری» نوار «وضعیت خوانش ابری» هست.
-   سمت راست همان نوار باید بنویسد `2026-11-02-engines`.
+   سمت راست همان نوار باید بنویسد `2026-11-02-launcher`.
    اگر عدد دیگری بود، نسخهٔ قدیمی (یا کش مرورگر) است: `Ctrl+Shift+R`.
 2. روی «دیدن و ویرایش کلید» بزنید؛ کلید باید با `K` شروع شود.
 3. اگر خالی بود، «ثبت کلید آماده» را بزنید.
 4. سپس «آزمون واقعی کلید».
 
+
+## اگر setup.bat یا start.bat کار نکرد
+
+پنجرهٔ cmd را باز کنید، به پوشهٔ بسته بروید و همین را بزنید:
+
+```
+node tools\launch.mjs check
+```
+
+گزارش کامل چاپ می‌شود و در `doctor-report.txt` ذخیره می‌شود؛ همان فایل را بفرستید.
+فرمان‌های دیگر: `setup` · `start` · `falcon`.
 
 ## موتور خواندن — چه چیزی فعال است و چطور بهترین شود
 

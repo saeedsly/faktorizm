@@ -33,20 +33,26 @@ export default function OcrEngineStatus({ compact = false }: { compact?: boolean
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const engines: EngineReport[] = diag?.engines?.length
-    ? diag.engines
-    : [
-      { id: 'falcon-ocr-arabic', label: 'Falcon-OCR-Arabic', ready: false, reason: 'سرویس موتور قوی اجرا نشده است' },
-      { id: 'ppocrv5-arabic', label: 'PP-OCR (عربی)', ready: false, reason: 'سرویس موتور قوی اجرا نشده است' },
-      { id: 'tesseract-browser', label: 'Tesseract (درون مرورگر)', ready: true, reason: null },
-    ];
+  // حالت استاتیک (نسخهٔ سبک Apache): اصلاً سرویس محلی وجود ندارد، پس نشان دادن
+  // ردیف Falcon/PP-OCR با پیام «سرویس اجرا نشده» گمراه‌کننده بود.
+  const engines: EngineReport[] = diag?.mode === 'static'
+    ? [{ id: 'tesseract-browser', label: 'Tesseract (درون مرورگر)', ready: true, reason: null }]
+    : diag?.engines?.length
+      ? diag.engines
+      : [
+        { id: 'falcon-ocr-arabic', label: 'Falcon-OCR-Arabic', ready: false, reason: 'سرویس موتور قوی اجرا نشده است' },
+        { id: 'ppocrv5-arabic', label: 'PP-OCR (عربی)', ready: false, reason: 'سرویس موتور قوی اجرا نشده است' },
+        { id: 'tesseract-browser', label: 'Tesseract (درون مرورگر)', ready: true, reason: null },
+      ];
 
   const activeId = diag?.engineAvailable
     ? (diag.engineId || engines.find((e) => e.ready)?.id || null)
     : 'tesseract-browser';
   const activeLabel = diag?.engineAvailable
     ? (diag.engineLabel || engines.find((e) => e.ready)?.label)
-    : 'Tesseract 7 — درون‌مرورگر';
+    : (diag?.mode === 'static'
+      ? 'Tesseract 7 — درون‌مرورگر (این بسته سرویس محلی ندارد)'
+      : 'Tesseract 7 — درون‌مرورگر');
 
   return (
     <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-2.5">
