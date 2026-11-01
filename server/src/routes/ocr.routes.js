@@ -37,9 +37,30 @@ router.get('/ocr/health', async (_req, res) => {
     const r = await fetch(`${OCR_BASE}/health`, { signal: controller.signal });
     clearTimeout(timer);
     const json = await r.json();
-    res.json({ success: true, data: { engineAvailable: !!json.ok, engine: json.engine, error: json.error } });
+    res.json({
+      success: true,
+      data: {
+        engineAvailable: !!json.ok,
+        engine: json.engine,
+        engineId: json.engineId,
+        error: json.error,
+        // گزارش کامل موتورها تا رابط کاربری بگوید کدام موتور چرا آماده نیست
+        engines: json.engines ?? [],
+        diagnostics: json.diagnostics ?? null,
+      },
+    });
   } catch {
-    res.json({ success: true, data: { engineAvailable: false, engine: null, error: 'service down' } });
+    res.json({
+      success: true,
+      data: {
+        engineAvailable: false,
+        engine: null,
+        engineId: null,
+        error: 'سرویس موتور قوی (پایتون) اجرا نشده است',
+        engines: [],
+        diagnostics: null,
+      },
+    });
   }
 });
 

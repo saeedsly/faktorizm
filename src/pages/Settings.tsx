@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import CloudKeyStatus from '@/components/CloudKeyStatus';
+import OcrEngineStatus from '@/components/OcrEngineStatus';
 import { Card, CardTitle, Input, Select, Label, Button, Switch, Badge } from '@/components/ui/primitives';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useAppStore } from '@/lib/store';
@@ -13,31 +14,10 @@ import { exportBackup, importBackup } from '@/lib/exporters/backup';
 import { seedDemoData, wipeAllData } from '@/lib/seed';
 import { logActivity } from '@/lib/activity';
 import { toFaDigits } from '@/lib/utils';
-import { checkServerOcr } from '@/lib/ocr/serverEngine';
 import { AI_PROVIDERS, testAiConnection } from '@/lib/ocr/aiEngine';
 import { FREE_BADGE, FREE_FIRST, keysOf, providerInfo } from '@/lib/ocr/providers';
 import type { ProviderId } from '@/lib/ocr/providers';
 import { ExternalLink, KeyRound, CheckCircle2, CloudCog, BookOpen } from 'lucide-react';
-
-/** نشانگر موتور فعال OCR: سرویس محلی PP-OCRv5 یا موتور داخلی مرورگر */
-function EngineBadge() {
-  const [state, setState] = useState<'checking' | 'v5' | 'tesseract'>('checking');
-
-  useEffect(() => {
-    let alive = true;
-    checkServerOcr().then((up) => {
-      if (alive) setState(up ? 'v5' : 'tesseract');
-    });
-    return () => { alive = false; };
-  }, []);
-  if (state === 'checking') {
-    return <Badge className="bg-muted text-muted-foreground">در حال بررسی موتور OCR…</Badge>;
-  }
-  if (state === 'v5') {
-    return <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">موتور محلی فعال: PP-OCRv5 (عربی/فارسی) — پشتیبان Tesseract 7</Badge>;
-  }
-  return <Badge className="bg-accent-soft text-accent">موتور فعال: Tesseract 7 — داده زبان فارسی ۴.۰ (درون‌مرورگر)</Badge>;
-}
 
 export default function SettingsPage() {
   const { settings, update, applyTheme } = useAppStore();
@@ -178,6 +158,8 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+
+            <OcrEngineStatus />
 
             <CloudKeyStatus />
 
@@ -346,7 +328,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <EngineBadge />
           </div>
         </Card>
 

@@ -24,7 +24,9 @@ import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.environ.get('OCR_MODEL_DIR', os.path.join(BASE_DIR, 'models'))
-FALCON_DIR = os.environ.get('OCR_FALCON_DIR', os.path.join(MODEL_DIR, 'falcon-ocr'))
+# همان پوشه‌ای که engines.detect_falcon() می‌گردد؛ اختلاف این دو، باعث می‌شد
+# وزن‌ها دانلود شوند ولی موتور هرگز فعال نشود.
+FALCON_DIR = os.environ.get('OCR_FALCON_DIR', os.path.join(MODEL_DIR, 'falcon-ocr-arabic'))
 DEFAULT_REPO = os.environ.get('OCR_FALCON_REPO', 'tiiuae/Falcon-OCR')
 
 OK = '✓'

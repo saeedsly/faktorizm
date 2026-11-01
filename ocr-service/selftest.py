@@ -128,6 +128,25 @@ def main():
     unknown = engines.select('engine-ناموجود')
     check('موتور ناشناخته → None', unknown, None)
 
+    # ---- گزارش وضعیت (همان چیزی که رابط کاربری نشان می‌دهد) ----
+    diag = engines.diagnostics()
+    check('گزارش وضعیت کلیدهای لازم را دارد',
+          {'engines', 'falcon', 'python', 'dictionary', 'files'} <= set(diag), True)
+    check('سه موتور در گزارش هست', len(diag['engines']), 3)
+    check('شمار واژه‌های واژه‌نامه در گزارش', diag['dictionary']['words'], 4984)
+    check('هر موتور دلیل آماده‌نبودن دارد',
+          all(e['ready'] or e.get('reason') for e in diag['engines']), True)
+    check('دلیل انگلیسی برای کنسول هم هست',
+          all(e['ready'] or e.get('reasonEn') for e in diag['engines']), True)
+
+    # پوشهٔ Falcon که اسکریپت دانلود می‌نویسد باید همان باشد که شناسایی می‌خواند
+    import download_models
+    check('پوشهٔ دانلود و شناسایی Falcon یکی است',
+          download_models.FALCON_DIR, engines.falcon_status()['dir'])
+    check('مسیرهای جایگزین Falcon بررسی می‌شوند', len(engines.FALCON_DIRS) >= 4, True)
+    if not diag['falcon']['ready']:
+        check('Falcon آماده نیست ولی دلیل دارد', bool(diag['falcon']['reason']), True)
+
     failed = [c for c in checks if not c[1]]
     print()
     print(f'{len(checks) - len(failed)}/{len(checks)} بررسی موفق')

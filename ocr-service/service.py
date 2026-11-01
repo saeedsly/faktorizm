@@ -71,6 +71,7 @@ class Handler(BaseHTTPRequestHandler):
                 'engine': info.get('label'),
                 'engineId': info.get('id'),
                 'engines': engines.available(),
+                'diagnostics': engines.diagnostics(),
                 'pipeline': 'auto-engine + multi-variant + reread + rtl-reconstruct',
                 'validation': {
                     'autoConfirm': AUTO_CONFIRM,

@@ -20,6 +20,7 @@
 از قبل در پوشه models باشند (اسکریپت fetch در scripts/).
 """
 import glob
+import sys
 import importlib.util
 import os
 
@@ -68,20 +69,78 @@ def _cls_path():
     return _first_existing(['cls.onnx', '*cls*.onnx'])
 
 
-def detect_falcon():
-    """آیا Falcon-OCR-Arabic قابل استفاده است؟"""
-    model_dir = os.environ.get('OCR_FALCON_DIR', os.path.join(MODEL_DIR, 'falcon-ocr-arabic'))
-    has_weights = bool(
-        glob.glob(os.path.join(model_dir, '*.safetensors'))
-        or glob.glob(os.path.join(model_dir, '*.bin'))
-        or glob.glob(os.path.join(model_dir, '*.onnx'))
-    )
-    if not has_weights or not _has_module('transformers'):
-        return None
+# پوشه‌های ممکن وزن‌های Falcon — download_models.py هر کدام را بسازد، همین‌جا
+# پیدا می‌شود. قبلاً فقط «falcon-ocr-arabic» بررسی می‌شد و اسکریپت دانلود در
+# «falcon-ocr» می‌ریخت؛ نتیجه: موتور هرگز پیدا نمی‌شد.
+FALCON_DIRS = [
+    os.environ.get('OCR_FALCON_DIR'),
+    os.path.join(MODEL_DIR, 'falcon-ocr-arabic'),
+    os.path.join(MODEL_DIR, 'falcon-ocr'),
+    os.path.join(BASE_DIR, 'falcon-ocr-arabic'),
+    os.path.join(BASE_DIR, 'falcon-ocr'),
+]
+
+
+def falcon_dir():
+    """نخستین پوشهٔ موجود که وزن مدل دارد (یا مسیر پیش‌فرض برای پیام راهنما)."""
+    for path in FALCON_DIRS:
+        if not path:
+            continue
+        if os.path.isdir(path) and _falcon_weights(path):
+            return path
+    return FALCON_DIRS[1]
+
+
+def _falcon_weights(path):
+    return sorted(
+        [f for f in os.listdir(path) if f.endswith(('.safetensors', '.bin', '.onnx'))]
+    ) if os.path.isdir(path) else []
+
+
+def falcon_status():
+    """
+    وضعیت کامل Falcon-OCR — برای اینکه رابط کاربری بتواند بگوید *چرا* آماده نیست.
+
+    سه شرط لازم است: وزن مدل، کتابخانهٔ transformers، و torch.
+    """
+    path = falcon_dir()
+    weights = _falcon_weights(path)
+    has_torch = _has_module('torch')
+    has_transformers = _has_module('transformers')
+    if weights and has_torch and has_transformers:
+        reason, reason_en = None, None
+    elif not weights:
+        reason = f'وزن مدل در {path} نیست (یک‌بار falcon-setup.bat را اجرا کنید)'
+        reason_en = f'model weights missing in {path} (run falcon-setup.bat once)'
+    elif not has_transformers:
+        reason = 'کتابخانهٔ transformers نصب نیست (requirements-falcon.txt)'
+        reason_en = 'transformers is not installed (requirements-falcon.txt)'
+    else:
+        reason = 'کتابخانهٔ torch نصب نیست (requirements-falcon.txt)'
+        reason_en = 'torch is not installed (requirements-falcon.txt)'
     return {
         'id': 'falcon-ocr-arabic',
         'label': 'Falcon-OCR-Arabic (TII)',
-        'path': model_dir,
+        'dir': path,
+        'weights': weights[:3],
+        'hasWeights': bool(weights),
+        'hasTorch': has_torch,
+        'hasTransformers': has_transformers,
+        'ready': bool(weights) and has_torch and has_transformers,
+        'reason': reason,
+        'reasonEn': reason_en,
+    }
+
+
+def detect_falcon():
+    """آیا Falcon-OCR-Arabic قابل استفاده است؟"""
+    status = falcon_status()
+    if not status['ready']:
+        return None
+    return {
+        'id': status['id'],
+        'label': status['label'],
+        'path': status['dir'],
         'kind': 'falcon',
     }
 
@@ -198,4 +257,88 @@ def det_params():
         'thresh': DET_THRESH,
         'box_thresh': DET_BOX_THRESH,
         'limit_side_len': DET_SIDE,
+    }
+
+
+def _dict_words():
+    """شمار واژه‌های واژه‌نامهٔ فارسی (برای گزارش وضعیت)."""
+    try:
+        import persian_dict  # noqa: WPS433 — تنبل
+
+        return len(persian_dict.WORDS)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def diagnostics():
+    """
+    گزارش کامل «چه چیزی هست و چه چیزی نیست».
+
+    رابط کاربری همین را نشان می‌دهد؛ بدون این گزارش کاربر فقط می‌دید
+    «موتور فعال: Tesseract» و نمی‌دانست چرا موتور قوی نیامده است.
+    """
+    det = _det_paths()
+    rec, keys = _arabic_rec_paths()
+    falcon = falcon_status()
+    rapid_ready = bool(det and rec and _has_module('rapidocr') and _has_module('onnxruntime'))
+    rapid_reason = rapid_reason_en = None
+    if not det:
+        rapid_reason = 'فایل مدل تشخیص (det.onnx) نیست'
+        rapid_reason_en = 'detector model file (det.onnx) is missing'
+    elif not rec:
+        rapid_reason = 'فایل رکونایزر عربی (rec.onnx) نیست'
+        rapid_reason_en = 'arabic recognizer file (rec.onnx) is missing'
+    elif not _has_module('onnxruntime'):
+        rapid_reason = 'onnxruntime نصب نیست'
+        rapid_reason_en = 'onnxruntime is not installed'
+    elif not _has_module('rapidocr'):
+        rapid_reason = 'rapidocr نصب نیست (setup.bat مرحلهٔ ۳)'
+        rapid_reason_en = 'rapidocr is not installed (run setup.bat)'
+
+    engines = [
+        {
+            'id': 'falcon-ocr-arabic',
+            'label': 'Falcon-OCR-Arabic',
+            'ready': falcon['ready'],
+            'reason': falcon['reason'],
+            'reasonEn': falcon['reasonEn'],
+            'hint': 'دقیق‌ترین موتور برای جدول و متن فارسی — نصب یک‌باره با falcon-setup.bat',
+        },
+        {
+            'id': 'ppocrv6-arabic' if (det and 'v6' in os.path.basename(det).lower()) else 'ppocrv5-arabic',
+            'label': 'PP-OCR (عربی)',
+            'ready': rapid_ready,
+            'reason': rapid_reason,
+            'reasonEn': rapid_reason_en,
+            'hint': 'موتور محلی پیشنهادی: تشخیص جعبه + رکونایزر عربی PP-OCRv5',
+        },
+        {
+            'id': 'tesseract-browser',
+            'label': 'Tesseract (درون مرورگر)',
+            'ready': True,
+            'reason': None,
+            'reasonEn': None,
+            'hint': 'همیشه در دسترس؛ پشتیبان نهایی بدون نیاز به پایتون',
+        },
+    ]
+
+    return {
+        'modelsDir': MODEL_DIR,
+        'files': {
+            'det': os.path.basename(det) if det else None,
+            'rec': os.path.basename(rec) if rec else None,
+            'cls': os.path.basename(_cls_path()) if _cls_path() else None,
+            'dict': os.path.basename(keys) if keys else None,
+        },
+        'python': {
+            'executable': sys.executable,
+            'version': '%d.%d.%d' % sys.version_info[:3],
+            'onnxruntime': _has_module('onnxruntime'),
+            'rapidocr': _has_module('rapidocr'),
+            'torch': falcon['hasTorch'],
+            'transformers': falcon['hasTransformers'],
+        },
+        'falcon': falcon,
+        'dictionary': {'words': _dict_words()},
+        'engines': engines,
     }

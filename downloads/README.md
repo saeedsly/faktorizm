@@ -1,10 +1,10 @@
 # بسته نصب فاکتوریزم
 
-سه گزینه برای تست — همه با نسخهٔ تازه با رفع خطای E201 (`BUILD 2026-11-01-key5`).
+سه گزینه برای تست — همه با نسخهٔ تازه با رفع خطای E201 (`BUILD 2026-11-02-engines`).
 
 ## گزینهٔ ۱ — اجرا با Node.js (بدون XAMPP)
 
-**فایل:** `faktorizm-node.zip` (۷٫۷ مگابایت)
+**فایل:** `faktorizm-node.zip` (۲۳٫۶ مگابایت — شامل سرویس OCR محلی)
 **دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
 **دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
 
@@ -20,7 +20,7 @@
 
 ## گزینهٔ ۲ — نصب روی XAMPP (Apache + MySQL + Node)
 
-**فایل:** `faktorizm-xampp.zip` (۱۷ مگابایت)
+**فایل:** `faktorizm-xampp.zip` (۲۰٫۳ مگابایت — شامل سرویس OCR محلی)
 **دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
 **دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
 
@@ -33,8 +33,8 @@
 
 ## گزینهٔ ۳ (سبک، فقط Apache / ویندوز ۷) — بدون Node
 
-**فایل:** `faktorizm-htdocs-slim-v5.zip` (۴ مگابایت)
-**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs-slim-v5.zip
+**فایل:** `faktorizm-htdocs-slim-v6.zip` (۴ مگابایت)
+**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs-slim-v6.zip
 
 محتوای پوشهٔ `faktorizm` را در `C:\xampp\htdocs\` بریزید و Apache را روشن کنید → `http://localhost/faktorizm/`
 داده‌ها در IndexedDB همان دستگاه می‌مانند.
@@ -43,11 +43,23 @@
 ## اگر کلید در تنظیمات دیده نشد (رفع در این نسخه)
 
 1. تنظیمات را باز کنید؛ بالای کارت «خوانش ابری» نوار «وضعیت خوانش ابری» هست.
-   سمت راست همان نوار باید بنویسد `2026-11-01-key5`.
+   سمت راست همان نوار باید بنویسد `2026-11-02-engines`.
    اگر عدد دیگری بود، نسخهٔ قدیمی (یا کش مرورگر) است: `Ctrl+Shift+R`.
 2. روی «دیدن و ویرایش کلید» بزنید؛ کلید باید با `K` شروع شود.
 3. اگر خالی بود، «ثبت کلید آماده» را بزنید.
 4. سپس «آزمون واقعی کلید».
+
+
+## موتور خواندن — چه چیزی فعال است و چطور بهترین شود
+
+| موتور | چطور فعال می‌شود | مقدار |
+|---|---|---|
+| Falcon-OCR (دقیق‌ترین) | `falcon-setup.bat` (یک‌بار) | ~۱٫۱ گیگابایت وزن + torch |
+| PP-OCR عربی | `setup.bat` (یک‌بار) | ~۶۰ مگابایت دانلود |
+| Tesseract درون مرورگر | همیشه | — |
+
+در برنامه: تنظیمات ← کارت «موتور خواندن (OCR)» → می‌گوید کدام فعال است و برای بقیه چه چیزی کم است.
+روی ویندوز: `check-engines.bat` → گزارش کامل. جزئیات: [OCR-ENGINES-FA.md](../OCR-ENGINES-FA.md)
 
 ## خوانش ابری (OCR.Space)
 

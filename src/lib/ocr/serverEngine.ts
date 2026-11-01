@@ -171,3 +171,75 @@ export async function recognizeViaServer(canvas: HTMLCanvasElement): Promise<Ser
     return null;
   }
 }
+
+/** یک موتور از گزارش سلامت سرویس */
+export interface EngineReport {
+  id: string;
+  label: string;
+  ready: boolean;
+  reason?: string | null;
+  hint?: string | null;
+}
+
+/** گزارش کامل وضعیت — همان چیزی که صفحهٔ تنظیمات نشان می‌دهد */
+export interface EngineDiagnostics {
+  engineAvailable: boolean;
+  engineId: string | null;
+  engineLabel: string | null;
+  error: string | null;
+  python: { executable?: string; version?: string; onnxruntime?: boolean; rapidocr?: boolean; torch?: boolean; transformers?: boolean } | null;
+  falcon: { dir?: string; hasWeights?: boolean; weights?: string[]; ready?: boolean; reason?: string | null } | null;
+  dictionary: { words: number } | null;
+  files: Record<string, string | null> | null;
+  engines: EngineReport[];
+  /** وقتی سرویس پایتون جواب نمی‌دهد، از سمت مرورگر ساخته می‌شود */
+  serviceDown: boolean;
+  /** server = بستهٔ Node/XAMPP · static = نسخهٔ سبک روی Apache */
+  mode: 'server' | 'static';
+}
+
+/**
+ * گزارش وضعیت موتورها — برای نمایش صادقانه در رابط کاربری.
+ *
+ * پیش‌تر صفحهٔ تنظیمات فقط می‌نوشت «موتور فعال: Tesseract» و کاربر نمی‌دانست
+ * چرا موتور قوی نیامده است. این تابع دلیل هر موتور را هم می‌آورد.
+ */
+export async function engineDiagnostics(): Promise<EngineDiagnostics> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch('/api/v2/ocr/health', { signal: controller.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    // نسخهٔ سبک Apache هیچ API‌ای ندارد؛ پاسخ 404/HTML می‌آید و این را «حالت استاتیک»
+    // می‌نامیم تا پیام راهنما درست باشد.
+    const isJson = (res.headers.get('content-type') ?? '').includes('json');
+    if (!res.ok || !isJson) throw new Error('static');
+    const json = await res.json();
+    const data = json?.data ?? {};
+    const diag = data.diagnostics ?? null;
+    return {
+      engineAvailable: !!data.engineAvailable,
+      engineId: data.engineId ?? diag?.engines?.find((e: EngineReport) => e.ready)?.id ?? null,
+      engineLabel: data.engine ?? null,
+      error: data.error ?? null,
+      python: diag?.python ?? null,
+      falcon: diag?.falcon ?? null,
+      dictionary: diag?.dictionary ?? null,
+      files: diag?.files ?? null,
+      engines: Array.isArray(diag?.engines) ? diag.engines : [],
+      serviceDown: false,
+      mode: 'server',
+    };
+  } catch {
+    availability = 'down';
+    return {
+      engineAvailable: false,
+      engineId: null,
+      engineLabel: null,
+      error: 'سرویس موتور قوی (پایتون) اجرا نشده است',
+      python: null, falcon: null, dictionary: null, files: null, engines: [],
+      serviceDown: true,
+      mode: 'static',
+    };
+  }
+}
