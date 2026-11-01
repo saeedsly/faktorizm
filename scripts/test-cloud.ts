@@ -7,7 +7,10 @@
  *  • گردش کلید وقتی اولی به سقف خورده (۴۲۹)
  *  • هیچ عددی برای فیلد نبوده ساخته نمی‌شود
  */
-import { callOcrSpace, recognizeWithAi, testAiConnection, withKeyRotation } from '../src/lib/ocr/aiEngine';
+import {
+  callOcrSpace, recognizeWithAi, testAiConnection, withKeyRotation,
+  ocrSpaceAttempts, isLanguageParameterError,
+} from '../src/lib/ocr/aiEngine';
 import { fieldsFromOcrText } from '../src/lib/ocr/cloudText';
 
 let pass = 0;
@@ -76,7 +79,8 @@ async function testOcrSpaceRequest() {
     check('کلید در هدر apikey است', (sent.init?.headers as Record<string, string>)?.apikey === 'K1234567890');
     const body = sent.init?.body as FormData;
     check('زبان ara فرستاده شد', body.get('language') === 'ara');
-    check('OCREngine=2', body.get('OCREngine') === '2');
+    // عربی فقط با موتور ۱ پشتیبانی می‌شود؛ درخواست باید همان را بفرستد
+    check('عربی با OCREngine=1 فرستاده می‌شود', body.get('OCREngine') === '1', String(body.get('OCREngine')));
     check('تصویر به‌صورت data-URL', String(body.get('base64Image')).startsWith('data:image/jpeg;base64,'));
     check('جدول‌خوانی روشن', body.get('isTable') === 'true');
   } finally {
@@ -264,6 +268,55 @@ async function testBrowserBlockedFallback() {
   }
 }
 
+
+async function testLanguageEngineMatrix() {
+  console.log('— ترکیب موتور/زبان (منشأ خطای E201) —');
+  check('ara → موتور ۱', ocrSpaceAttempts('ara')[0].engine === '1');
+  check('ara → زبان ara', ocrSpaceAttempts('ara')[0].language === 'ara');
+  check('auto → موتور ۲', ocrSpaceAttempts('auto')[0].engine === '2');
+  check('eng → موتور ۲', ocrSpaceAttempts('eng')[0].engine === '2');
+  check('زبان ناشناس هم زنجیره دارد', ocrSpaceAttempts('zzz').length >= 2);
+  check('E201 به‌عنوان خطای پارامتر شناخته می‌شود',
+    isLanguageParameterError(new Error("OCR.Space: E201: Value for parameter 'language' is invalid")));
+  check('خطای کلید، خطای پارامتر نیست', !isLanguageParameterError(new Error('Invalid API key')));
+
+  // سرویس اول E201 می‌دهد، تلاش دوم جواب می‌دهد
+  let call = 0;
+  const mock = mockFetch(() => {
+    call += 1;
+    if (call === 1) {
+      return { IsErroredOnProcessing: true, ErrorMessage: ["E201: Value for parameter 'language' is invalid"] };
+    }
+    return { ParsedResults: [{ ParsedText: OCR_TEXT }], IsErroredOnProcessing: false };
+  });
+  try {
+    const text = await callOcrSpace(image, { provider: 'ocrspace', apiKey: 'K1234567890', model: 'ara' });
+    check('بعد از E201 خودکار تلاش دوم انجام شد', call === 2, String(call));
+    check('متن با ترکیب جایگزین خوانده شد', text.includes('فروشگاه'));
+  } finally {
+    mock.restore();
+  }
+
+  // خطای کلید نباید تلاش بی‌فایده بزند
+  let badCalls = 0;
+  const badMock = mockFetch(() => {
+    badCalls += 1;
+    return { IsErroredOnProcessing: true, ErrorMessage: ['Invalid API key'] };
+  });
+  try {
+    let message = '';
+    try {
+      await callOcrSpace(image, { provider: 'ocrspace', apiKey: 'bad-key-0000', model: 'ara' });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    check('خطای کلید فوراً گزارش می‌شود', /Invalid API key/.test(message), message);
+    check('برای خطای کلید تلاش تکراری نکرد', badCalls === 1, String(badCalls));
+  } finally {
+    badMock.restore();
+  }
+}
+
 async function main() {
   await testOcrSpaceRequest();
   await testOcrSpaceErrors();
@@ -272,6 +325,7 @@ async function main() {
   await testKeyRotation();
   await testConnectionProbe();
   await testBrowserBlockedFallback();
+  await testLanguageEngineMatrix();
   console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} موفق، ${fail} ناموفق`);
   if (fail) process.exit(1);
 }

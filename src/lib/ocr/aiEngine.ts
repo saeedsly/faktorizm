@@ -440,6 +440,42 @@ async function callOpenAiCompatible(
  * دریافت با پارسر محلی به فیلد تبدیل می‌شود. سقف پلن رایگان ۱ مگابایت برای هر
  * تصویر است، پس تصویر پیش از ارسال کوچک می‌شود.
  */
+
+/**
+ * ترکیب «موتور و زبان» برای OCR.Space.
+ *
+ * واقعیت سرویس: موتور ۲ (OCREngine=2) زبان عربی را پشتیبانی نمی‌کند و پاسخ
+ * «E201: Value for parameter 'language' is invalid» می‌دهد. عربی/فارسی فقط با
+ * موتور ۱ خوانده می‌شود. برای همین اول ترکیب درست امتحان می‌شود و اگر سرویس
+ * همان E201 را داد، ترتیب جایگزین می‌آید.
+ */
+export function ocrSpaceAttempts(language: string): Array<{ engine: '1' | '2'; language: string }> {
+  const lang = (language || 'ara').trim().toLowerCase();
+  if (lang.startsWith('ara') || lang.startsWith('fas') || lang.startsWith('per')) {
+    return [
+      { engine: '1', language: 'ara' },
+      { engine: '2', language: 'auto' },
+    ];
+  }
+  if (lang === 'auto') {
+    return [
+      { engine: '2', language: 'auto' },
+      { engine: '1', language: 'ara' },
+    ];
+  }
+  return [
+    { engine: '2', language: lang },
+    { engine: '2', language: 'auto' },
+    { engine: '1', language: 'ara' },
+  ];
+}
+
+/** خطای E201 یعنی ترکیب موتور/زبان غلط است؛ نه کلید و نه سهمیه */
+export function isLanguageParameterError(error: unknown): boolean {
+  const text = error instanceof Error ? error.message : String(error);
+  return /E201|language[^\n]*invalid/i.test(text);
+}
+
 const OCRSPACE_MAX_KB = 950;
 
 export async function callOcrSpace(
@@ -449,50 +485,55 @@ export async function callOcrSpace(
 ): Promise<string> {
   const info = providerInfo('ocrspace');
   const base = baseUrlOf('ocrspace', cfg.baseUrl);
-  const language = (cfg.model || info.defaultModel || 'ara').trim();
-  const body = new FormData();
-  body.append('base64Image', `data:${image.mime};base64,${image.base64}`);
-  body.append('language', language);
-  body.append('isOverlayRequired', 'false');
-  body.append('detectOrientation', 'true');
-  body.append('scale', 'true');
-  body.append('isTable', 'true');
-  body.append('OCREngine', '2');
-  body.append('filetype', image.mime.includes('png') ? 'PNG' : 'JPG');
+  const requested = (cfg.model || info.defaultModel || 'ara').trim();
+  const attempts = ocrSpaceAttempts(requested);
+  let lastError: unknown;
 
-  let response: Response;
-  try {
-    response = await fetch(`${base}/parse/image`, {
-      method: 'POST',
-      signal,
-      headers: { apikey: cfg.apiKey },
-      body,
-    });
-  } catch (err) {
-    // مرورگر نتوانست مستقیم وصل شود (CORS، فیلتر شبکه یا قطعی) → از سرور خودمان
-    if (signal?.aborted) throw err;
-    return callOcrSpaceViaServer(image, cfg, signal);
-  }
-  if (!response.ok) throw httpError('OCR.Space', response.status, await response.text());
+  for (const attempt of attempts) {
+    const body = new FormData();
+    body.append('base64Image', `data:${image.mime};base64,${image.base64}`);
+    body.append('language', attempt.language);
+    body.append('OCREngine', attempt.engine);
+    body.append('isOverlayRequired', 'false');
+    body.append('detectOrientation', 'true');
+    body.append('scale', 'true');
+    body.append('isTable', 'true');
+    body.append('filetype', image.mime.includes('png') ? 'PNG' : 'JPG');
 
-  const payload = await response.json() as {
-    ParsedResults?: Array<{ ParsedText?: string; ErrorMessage?: string; ErrorDetails?: string }>;
-    IsErroredOnProcessing?: boolean;
-    ErrorMessage?: string | string[];
-    OCRExitCode?: number;
-  };
-  if (payload.IsErroredOnProcessing) {
+    let response: Response;
+    try {
+      response = await fetch(`${base}/parse/image`, {
+        method: 'POST',
+        signal,
+        headers: { apikey: cfg.apiKey },
+        body,
+      });
+    } catch (err) {
+      // مرورگر نتوانست مستقیم وصل شود (CORS، فیلتر شبکه یا قطعی) → از سرور خودمان
+      if (signal?.aborted) throw err;
+      return callOcrSpaceViaServer(image, cfg, signal);
+    }
+    if (!response.ok) throw httpError('OCR.Space', response.status, await response.text());
+
+    const payload = await response.json() as {
+      ParsedResults?: Array<{ ParsedText?: string }>;
+      IsErroredOnProcessing?: boolean;
+      ErrorMessage?: string | string[];
+    };
+    if (!payload.IsErroredOnProcessing) {
+      const text = (payload.ParsedResults ?? []).map((r) => r.ParsedText ?? '').join('\n').trim();
+      if (text) return text;
+      lastError = new Error('OCR.Space متنی از تصویر برنگرداند');
+      continue;
+    }
     const message = Array.isArray(payload.ErrorMessage)
       ? payload.ErrorMessage.join(' · ')
       : payload.ErrorMessage;
-    throw new Error(`OCR.Space: ${message || 'پردازش تصویر ناموفق بود'}`);
+    lastError = new Error(`OCR.Space: ${message || 'پردازش تصویر ناموفق بود'}`);
+    // فقط خطای «زبان/موتور» ارزش تلاش بعدی دارد؛ خطای کلید یا سهمیه نه
+    if (!isLanguageParameterError(lastError)) throw lastError;
   }
-  const text = (payload.ParsedResults ?? [])
-    .map((result) => result.ParsedText ?? '')
-    .join('\n')
-    .trim();
-  if (!text) throw new Error('OCR.Space متنی از تصویر برنگرداند');
-  return text;
+  throw lastError ?? new Error('OCR.Space پاسخ نداد');
 }
 
 
@@ -640,7 +681,8 @@ export async function testAiConnection(cfg: AiOcrConfig): Promise<{ ok: boolean;
       const body = new FormData();
       body.append('base64Image', `data:image/png;base64,${probe}`);
       body.append('language', model || 'ara');
-      body.append('OCREngine', '2');
+      // عربی فقط با موتور ۱ پشتیبانی می‌شود؛ وگرنه سرویس E201 می‌دهد
+      body.append('OCREngine', (model || 'ara').toLowerCase().startsWith('ara') ? '1' : '2');
       const res = await fetch(`${base}/parse/image`, {
         method: 'POST', signal: controller.signal, headers: { apikey: key }, body,
       });

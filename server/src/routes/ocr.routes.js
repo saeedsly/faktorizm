@@ -61,14 +61,14 @@ router.post('/ocr/recognize', authenticate, async (req, res) => {
     return res.status(503).json({
       success: false,
       error: {
-        code: 'OCR_SERVICE_DOWN',
-        message: aborted ? 'سرویس OCR در مهلت مقرر پاسخ نداد' : 'سرویس OCR پایتون در دسترس نیست',
+        code: 'CLOUD_UNREACHABLE',
+        message: aborted ? 'سرویس ابری در مهلت مقرر پاسخ نداد' : 'سرور به سرویس ابری دسترسی ندارد',
       },
     });
+  } finally {
+    clearTimeout(timer);
   }
 });
-
-export default router;
 
 /**
  * پروکسی سرویس ابری (OCR.Space)
@@ -77,8 +77,27 @@ export default router;
  * ابری را نمی‌دهند (CORS یا فیلتر) و نتیجه‌اش «اتصال برقرار نشد» است. این مسیر
  * همان درخواست را از سمت سرور (همین دستگاه) می‌فرستد؛ کلید فقط در بدنهٔ همین
  * درخواست محلی است و ذخیره یا لاگ نمی‌شود.
+ *
+ * نکتهٔ مهم سرویس: موتور ۲ زبان عربی را پشتیبانی نمی‌کند و
+ * «E201: Value for parameter 'language' is invalid» می‌دهد؛ عربی/فارسی فقط با
+ * موتور ۱ خوانده می‌شود. برای همین چند ترکیب به ترتیب امتحان می‌شود.
  */
 const CLOUD_TIMEOUT_MS = Number(process.env.CLOUD_TIMEOUT_MS || 90000);
+
+function cloudAttempts(language) {
+  const lang = String(language || 'ara').toLowerCase();
+  if (lang.startsWith('ara') || lang.startsWith('fas') || lang.startsWith('per')) {
+    return [{ engine: '1', language: 'ara' }, { engine: '2', language: 'auto' }];
+  }
+  if (lang === 'auto') {
+    return [{ engine: '2', language: 'auto' }, { engine: '1', language: 'ara' }];
+  }
+  return [
+    { engine: '2', language: lang },
+    { engine: '2', language: 'auto' },
+    { engine: '1', language: 'ara' },
+  ];
+}
 
 router.post('/ocr/cloud', authenticate, async (req, res) => {
   const body = req.body || {};
@@ -90,35 +109,46 @@ router.post('/ocr/cloud', authenticate, async (req, res) => {
   if (!b64) {
     return res.status(400).json({ success: false, error: { code: 'BAD_IMAGE', message: 'تصویر ارسال نشده است' } });
   }
-  const language = String(body.language || 'ara').slice(0, 12);
-  const form = new FormData();
-  form.append('base64Image', `data:image/jpeg;base64,${b64}`);
-  form.append('language', language);
-  form.append('OCREngine', '2');
-  form.append('scale', 'true');
-  form.append('isTable', 'true');
-  form.append('detectOrientation', 'true');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
+  let lastMessage = '';
   try {
-    const upstream = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      headers: { apikey: key },
-      body: form,
-      signal: controller.signal,
-    });
-    const json = await upstream.json().catch(() => ({}));
-    const failed = json?.IsErroredOnProcessing;
-    if (!upstream.ok || failed) {
-      const message = Array.isArray(json?.ErrorMessage) ? json.ErrorMessage.join(' · ') : json?.ErrorMessage;
-      return res.status(502).json({
-        success: false,
-        error: { code: 'CLOUD_ERROR', message: message || `سرویس ابری خطا داد (${upstream.status})` },
+    for (const attempt of cloudAttempts(body.language)) {
+      const form = new FormData();
+      form.append('base64Image', `data:image/jpeg;base64,${b64}`);
+      form.append('language', attempt.language);
+      form.append('OCREngine', attempt.engine);
+      form.append('scale', 'true');
+      form.append('isTable', 'true');
+      form.append('detectOrientation', 'true');
+
+      const upstream = await fetch('https://api.ocr.space/parse/image', {
+        method: 'POST',
+        headers: { apikey: key },
+        body: form,
+        signal: controller.signal,
+      });
+      const json = await upstream.json().catch(() => ({}));
+      if (!upstream.ok || json?.IsErroredOnProcessing) {
+        const message = Array.isArray(json?.ErrorMessage) ? json.ErrorMessage.join(' · ') : json?.ErrorMessage;
+        lastMessage = message || `سرویس ابری خطا داد (${upstream.status})`;
+        // فقط خطای ترکیب زبان/موتور ارزش تلاش بعدی دارد؛ کلید غلط یا سهمیه نه
+        if (!/E201|language[^\n]*invalid/i.test(lastMessage)) {
+          return res.status(502).json({ success: false, error: { code: 'CLOUD_ERROR', message: lastMessage } });
+        }
+        continue;
+      }
+      const text = (json?.ParsedResults || []).map((r) => r?.ParsedText || '').join('\n').trim();
+      return res.json({
+        success: true,
+        data: { text, engine: 'ocrspace', language: attempt.language, ocrEngine: attempt.engine },
       });
     }
-    const text = (json?.ParsedResults || []).map((r) => r?.ParsedText || '').join('\n').trim();
-    return res.json({ success: true, data: { text, engine: 'ocrspace', language } });
+    return res.status(502).json({
+      success: false,
+      error: { code: 'CLOUD_ERROR', message: lastMessage || 'سرویس ابری پاسخ نداد' },
+    });
   } catch (err) {
     const aborted = err?.name === 'AbortError';
     return res.status(503).json({
@@ -133,3 +163,4 @@ router.post('/ocr/cloud', authenticate, async (req, res) => {
   }
 });
 
+export default router;
