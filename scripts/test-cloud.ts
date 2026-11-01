@@ -219,6 +219,51 @@ async function testConnectionProbe() {
   check('بدون کلید هشدار می‌دهد', noKey.ok === false && /کلید/.test(String(noKey.error)), String(noKey.error));
 }
 
+
+async function testBrowserBlockedFallback() {
+  console.log('— وقتی مرورگر به سرویس ابری دسترسی ندارد (CORS/فیلتر) —');
+  let call = 0;
+  const original = globalThis.fetch;
+  const seen: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    call += 1;
+    seen.push(String(input));
+    if (call === 1) throw new TypeError('Failed to fetch');
+    return new Response(JSON.stringify({ success: true, data: { text: OCR_TEXT } }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+  try {
+    const text = await callOcrSpace(image, { provider: 'ocrspace', apiKey: 'K1234567890', model: 'ara' });
+    check('متن از مسیر پروکسی برگشت', text.includes('فروشگاه'), text.slice(0, 40));
+    check('دو درخواست زده شد (مستقیم، بعد پروکسی)', seen.length === 2, seen.join(' | '));
+    check('درخواست دوم به سرور خودمان رفت', seen[1].includes('/api/v2/ocr/cloud'), seen[1]);
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  // پروکسی هم خطا بدهد: پیام واقعی سرور باید بالا بیاید
+  const mock = mockFetch((url) => {
+    if (url.includes('/api/v2/ocr/cloud')) {
+      return new Response(JSON.stringify({ success: false, error: { message: 'Invalid API key' } }), {
+        status: 502, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    throw new TypeError('Failed to fetch');
+  });
+  try {
+    let message = '';
+    try {
+      await callOcrSpace(image, { provider: 'ocrspace', apiKey: 'K1234567890' });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    check('خطای واقعی سرویس نمایش داده می‌شود', message.includes('Invalid API key'), message);
+  } finally {
+    mock.restore();
+  }
+}
+
 async function main() {
   await testOcrSpaceRequest();
   await testOcrSpaceErrors();
@@ -226,6 +271,7 @@ async function main() {
   await testGeminiShape();
   await testKeyRotation();
   await testConnectionProbe();
+  await testBrowserBlockedFallback();
   console.log(`\n${fail === 0 ? 'OK' : 'FAIL'} — ${pass} موفق، ${fail} ناموفق`);
   if (fail) process.exit(1);
 }

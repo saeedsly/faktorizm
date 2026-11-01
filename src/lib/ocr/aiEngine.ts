@@ -460,12 +460,19 @@ export async function callOcrSpace(
   body.append('OCREngine', '2');
   body.append('filetype', image.mime.includes('png') ? 'PNG' : 'JPG');
 
-  const response = await fetch(`${base}/parse/image`, {
-    method: 'POST',
-    signal,
-    headers: { apikey: cfg.apiKey },
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/parse/image`, {
+      method: 'POST',
+      signal,
+      headers: { apikey: cfg.apiKey },
+      body,
+    });
+  } catch (err) {
+    // مرورگر نتوانست مستقیم وصل شود (CORS، فیلتر شبکه یا قطعی) → از سرور خودمان
+    if (signal?.aborted) throw err;
+    return callOcrSpaceViaServer(image, cfg, signal);
+  }
   if (!response.ok) throw httpError('OCR.Space', response.status, await response.text());
 
   const payload = await response.json() as {
@@ -485,6 +492,49 @@ export async function callOcrSpace(
     .join('\n')
     .trim();
   if (!text) throw new Error('OCR.Space متنی از تصویر برنگرداند');
+  return text;
+}
+
+
+/**
+ * ارسال از طریق سرور خودمان — وقتی مرورگر اجازهٔ درخواست مستقیم به سرویس ابری
+ * را نمی‌دهد (CORS/فیلتر شبکه) یا اینترنت مرورگر محدود است. کلید فقط تا سرور
+ * همان دستگاه می‌رود و جایی ذخیره نمی‌شود.
+ */
+async function callOcrSpaceViaServer(
+  image: { mime: string; base64: string },
+  cfg: AiOcrConfig,
+  signal?: AbortSignal,
+): Promise<string> {
+  let token = '';
+  try {
+    const mod = await import('../api/client');
+    token = mod.getAccessToken?.() ?? '';
+  } catch { /* بدون توکن هم تلاش می‌کنیم */ }
+  // در تست‌های نود import.meta.env وجود ندارد؛ پیش‌فرض ریشهٔ سایت است
+  const baseUrl = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
+  const base = baseUrl.replace(/\/$/, '');
+  const response = await fetch(`${base}/api/v2/ocr/cloud`, {
+    method: 'POST',
+    signal,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      key: cfg.apiKey,
+      image: image.base64,
+      language: (cfg.model || 'ara').trim(),
+    }),
+  });
+  const payload = await response.json().catch(() => ({})) as {
+    success?: boolean; data?: { text?: string }; error?: { message?: string };
+  };
+  if (!response.ok || !payload.success) {
+    throw new Error(payload.error?.message || `پروکسی سرویس ابری خطا داد (${response.status})`);
+  }
+  const text = (payload.data?.text ?? '').trim();
+  if (!text) throw new Error('سرویس ابری متنی برنگرداند');
   return text;
 }
 

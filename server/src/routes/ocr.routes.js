@@ -69,3 +69,67 @@ router.post('/ocr/recognize', authenticate, async (req, res) => {
 });
 
 export default router;
+
+/**
+ * پروکسی سرویس ابری (OCR.Space)
+ *
+ * چرا لازم است: بعضی مرورگرها/شبکه‌ها اجازهٔ درخواست مستقیم به دامنهٔ سرویس
+ * ابری را نمی‌دهند (CORS یا فیلتر) و نتیجه‌اش «اتصال برقرار نشد» است. این مسیر
+ * همان درخواست را از سمت سرور (همین دستگاه) می‌فرستد؛ کلید فقط در بدنهٔ همین
+ * درخواست محلی است و ذخیره یا لاگ نمی‌شود.
+ */
+const CLOUD_TIMEOUT_MS = Number(process.env.CLOUD_TIMEOUT_MS || 90000);
+
+router.post('/ocr/cloud', authenticate, async (req, res) => {
+  const body = req.body || {};
+  const key = String(body.key || '').trim();
+  if (!key || key.length < 8) {
+    return res.status(400).json({ success: false, error: { code: 'NO_KEY', message: 'کلید API ارسال نشده است' } });
+  }
+  const b64 = String(body.image || '').replace(/^data:[^,]+,/, '');
+  if (!b64) {
+    return res.status(400).json({ success: false, error: { code: 'BAD_IMAGE', message: 'تصویر ارسال نشده است' } });
+  }
+  const language = String(body.language || 'ara').slice(0, 12);
+  const form = new FormData();
+  form.append('base64Image', `data:image/jpeg;base64,${b64}`);
+  form.append('language', language);
+  form.append('OCREngine', '2');
+  form.append('scale', 'true');
+  form.append('isTable', 'true');
+  form.append('detectOrientation', 'true');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CLOUD_TIMEOUT_MS);
+  try {
+    const upstream = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: { apikey: key },
+      body: form,
+      signal: controller.signal,
+    });
+    const json = await upstream.json().catch(() => ({}));
+    const failed = json?.IsErroredOnProcessing;
+    if (!upstream.ok || failed) {
+      const message = Array.isArray(json?.ErrorMessage) ? json.ErrorMessage.join(' · ') : json?.ErrorMessage;
+      return res.status(502).json({
+        success: false,
+        error: { code: 'CLOUD_ERROR', message: message || `سرویس ابری خطا داد (${upstream.status})` },
+      });
+    }
+    const text = (json?.ParsedResults || []).map((r) => r?.ParsedText || '').join('\n').trim();
+    return res.json({ success: true, data: { text, engine: 'ocrspace', language } });
+  } catch (err) {
+    const aborted = err?.name === 'AbortError';
+    return res.status(503).json({
+      success: false,
+      error: {
+        code: 'CLOUD_UNREACHABLE',
+        message: aborted ? 'سرویس ابری در مهلت مقرر پاسخ نداد' : 'سرور به سرویس ابری دسترسی ندارد',
+      },
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+});
+

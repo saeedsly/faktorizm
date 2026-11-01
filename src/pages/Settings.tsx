@@ -44,6 +44,7 @@ export default function SettingsPage() {
   const [confirmWipe, setConfirmWipe] = useState(false);
   const [wiping, setWiping] = useState(false);
   const [aiState, setAiState] = useState<'idle' | 'checking' | 'ok' | 'fail'>('idle');
+  const [aiError, setAiError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const s = settings;
@@ -316,6 +317,7 @@ export default function SettingsPage() {
                       model: s.aiModel,
                     });
                     setAiState(res.ok ? 'ok' : 'fail');
+                    setAiError(res.ok ? '' : (res.error ?? 'خطای نامشخص'));
                     if (res.ok) toast.success(`اتصال به ${providerInfo(s.aiProvider).label} برقرار است`);
                     else toast.error(`اتصال برقرار نشد: ${res.error ?? 'خطای نامشخص'}`);
                   }}
@@ -328,7 +330,18 @@ export default function SettingsPage() {
                   </p>
                 )}
                 {aiState === 'fail' && (
-                  <p className="text-[11px] font-semibold text-red-500">اتصال برقرار نشد؛ کلید، مدل یا آدرس پایه را بررسی کنید.</p>
+                  <div className="rounded-xl bg-danger-soft/60 p-2.5 space-y-1">
+                    <p className="text-[11px] font-semibold text-danger">اتصال برقرار نشد</p>
+                    {/* متن واقعی خطای سرویس؛ بدون آن معلوم نمی‌شود مشکل کلید است یا شبکه */}
+                    <p className="text-[11px] text-danger/90 leading-5 break-words" dir="auto">
+                      {aiError || 'دلیل خطا دریافت نشد'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground leading-5">
+                      اگر پیام «Failed to fetch» دیدید، یعنی مرورگر اجازهٔ تماس مستقیم با سرویس ابری را
+                      نداد؛ برنامه خودکار از سرور محلی (همین دستگاه) استفاده می‌کند. یک بار دیگر
+                      «آزمون اتصال» را بزنید.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
