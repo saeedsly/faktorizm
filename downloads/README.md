@@ -1,7 +1,50 @@
 # بسته نصب فاکتوریزم
 
-هر دو بسته از همین شاخه قابل دانلود است. آرشیوها کامل و آزمون‌شده‌اند (تست نفوذ ۲۴/۲۴، تست بار ۳۰۰۰ کاربر، اسموک ۸/۸).
+سه گزینه برای تست — همه با نسخهٔ تازه با رفع خطای E201 (`BUILD 2026-11-01-key4`).
 
+## گزینهٔ ۱ — اجرا با Node.js (بدون XAMPP)
+
+**فایل:** `faktorizm-node.zip` (۷٫۶ مگابایت)
+**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
+**دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-node.zip
+
+سرور Node + رابط کاربری آماده + همهٔ وابستگی‌ها **داخل بسته** است؛ به `npm install` و به اینترنت نیاز ندارد.
+پایگاه داده پیش‌فرض `memory` است، پس MySQL هم لازم نیست (داده‌ها با بستن برنامه پاک می‌شوند — مناسب تست).
+
+1. زیپ را Extract کنید (مسیر انگلیسی، بدون فاصله).
+2. `setup.bat` را یک بار اجرا کنید.
+3. `start.bat` را اجرا کنید → مرورگر: `http://localhost:8787`
+4. ورود: `admin@faktorizm.ir` / `Admin@1405`
+
+پیش‌نیاز: ویندوز ۱۰/۱۱ + Node.js ۲۰.۱۲ یا بالاتر.
+
+## گزینهٔ ۲ — نصب روی XAMPP (Apache + MySQL + Node)
+
+**فایل:** `faktorizm-xampp.zip` (۱۷ مگابایت)
+**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
+**دانلود جایگزین (CDN):** https://cdn.jsdelivr.net/gh/saeedsly/faktorizm@arena/b3a2f281-faktorizm/downloads/faktorizm-xampp.zip
+
+شامل سرور Node، رابط کاربری، اسکیمای MariaDB و سرویس OCR پایتون (اختیاری).
+
+1. زیپ را Extract کنید.
+2. XAMPP را باز کنید و MySQL را روشن کنید.
+3. `setup.bat` و سپس `start.bat`.
+4. مرورگر: `http://localhost:8787` — ورود: `admin@faktorizm.ir` / `Admin@1405`
+
+## گزینهٔ ۳ (سبک، فقط Apache / ویندوز ۷) — بدون Node
+
+**فایل:** `faktorizm-htdocs-slim-v4.zip` (۴ مگابایت)
+**دانلود:** https://github.com/saeedsly/faktorizm/raw/arena/b3a2f281-faktorizm/downloads/faktorizm-htdocs-slim-v4.zip
+
+محتوای پوشهٔ `faktorizm` را در `C:\xampp\htdocs\` بریزید و Apache را روشن کنید → `http://localhost/faktorizm/`
+داده‌ها در IndexedDB همان دستگاه می‌مانند.
+
+## خوانش ابری (OCR.Space)
+
+کلید از قبل ثبت شده است. برای آزمون: تنظیمات ← «وضعیت خوانش ابری» ← «آزمون واقعی کلید».
+تنظیمات معتبر: مدل `ara` · Base URL خالی · یک کلید.
+
+## جزئیات بیشتر
 ## ۱) نسخه کامل ویندوز — Node + MySQL + OCR قوی
 
 **فایل:** `faktorizm-xampp.zip` (۴۰ مگابایت)
