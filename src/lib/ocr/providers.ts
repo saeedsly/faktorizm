@@ -16,7 +16,8 @@ export type ProviderId =
   | 'mistral'
   | 'ollama'
   | 'custom'
-  | 'openai';
+  | 'openai'
+  | 'ocrspace';
 
 export interface ProviderModel {
   id: string;
@@ -36,8 +37,8 @@ export interface ProviderInfo {
   hint: string;
   /** آدرس پایه سازگار با OpenAI (بدون /chat/completions) */
   baseUrl: string;
-  /** آدرس گوگل سبک خاص خودش را دارد */
-  kind: 'gemini' | 'openai-compatible';
+  /** هر سرویس پروتکل خودش را دارد */
+  kind: 'gemini' | 'openai-compatible' | 'ocrspace';
   /** لینک گرفتن کلید */
   keyUrl: string;
   /** راهنمای کوتاه محل ساخت کلید */
@@ -178,6 +179,27 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
     defaultModel: '',
     models: [],
   },
+  ocrspace: {
+    id: 'ocrspace',
+    label: 'OCR.Space (موتور OCR ساده)',
+    free: 'free',
+    hint: 'بدون مدل زبانی و بدون محدودیت کشوری؛ ۲۵٬۰۰۰ درخواست در ماه رایگان و فقط یک ایمیل می‌خواهد.',
+    baseUrl: 'https://api.ocr.space',
+    kind: 'ocrspace',
+    keyUrl: 'https://ocr.space/ocrapi/freekey',
+    keySteps: [
+      'ایمیل خود را در صفحهٔ Free API Key وارد کنید و Register را بزنید',
+      'کد فعال‌سازی را از ایمیل تأیید کنید',
+      'کلید رایگان در همان صفحه و در ایمیل نشان داده می‌شود؛ کپی و اینجا بچسبانید',
+    ],
+    rateNote: '۲۵٬۰۰۰ درخواست در ماه · هر تصویر حداکثر ۱ مگابایت · زبان عربی (پوشش فارسی)',
+    defaultModel: 'ara',
+    models: [
+      { id: 'ara', label: 'عربی — مناسب فارسی', best: true, note: 'رقم فارسی و متن چاپی را می‌خواند' },
+      { id: 'eng', label: 'انگلیسی — فقط برای فاکتور لاتین' },
+      { id: 'ara,eng', label: 'عربی + انگلیسی', note: 'فاکتورهای دونبشه' },
+    ],
+  },
   openai: {
     id: 'openai',
     label: 'OpenAI (پرداختی)',
@@ -199,7 +221,9 @@ export const PROVIDERS: Record<ProviderId, ProviderInfo> = {
 };
 
 /** ترتیب پیشنهادی: اول گزینه‌های رایگان و بی‌دردسر */
-export const FREE_FIRST: ProviderId[] = ['gemini', 'openrouter', 'github', 'groq', 'mistral', 'ollama', 'custom', 'openai'];
+export const FREE_FIRST: ProviderId[] = [
+  'gemini', 'ocrspace', 'openrouter', 'github', 'groq', 'mistral', 'ollama', 'custom', 'openai',
+];
 
 export function providerInfo(id: string | undefined): ProviderInfo {
   return PROVIDERS[(id as ProviderId) ?? 'gemini'] ?? PROVIDERS.gemini;

@@ -248,7 +248,9 @@ export interface Activity {
 
 /** ارائه‌دهنده سرویس ابری خوانش فاکتور (کلید متعلق به خود کاربر) */
 export type AiProvider =
-  | 'gemini' | 'openai' | 'openrouter' | 'github' | 'groq' | 'mistral' | 'ollama' | 'custom';
+  | 'gemini' | 'openai' | 'openrouter' | 'github' | 'groq' | 'mistral' | 'ollama' | 'custom'
+  /** موتور OCR ساده و ارزان (بدون مدل زبانی) — برای شبکه‌هایی که گوگل بسته است */
+  | 'ocrspace';
 
 /** حالت موتور خوانش: محلی آفلاین، ابری، یا ترکیبی (حداکثر دقت) */
 export type OcrEngineMode = 'local' | 'ai' | 'hybrid';

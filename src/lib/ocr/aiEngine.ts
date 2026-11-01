@@ -13,6 +13,7 @@ import {
   PROVIDERS, providerInfo, baseUrlOf, keysOf, FREE_FIRST,
 } from './providers';
 import type { ProviderId, ProviderInfo } from './providers';
+import { fieldsFromOcrText } from './cloudText';
 
 export interface AiOcrConfig {
   provider: AiProvider;
@@ -212,7 +213,11 @@ function isRetryable(err: unknown): boolean {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** کوچک‌کردن تصویر برای ارسال: کیفیت کافی برای خوانش، حجم کم برای سرعت و هزینه */
-async function prepareImage(blob: Blob, maxSide = 2000): Promise<{ mime: string; base64: string; kb: number }> {
+async function prepareImage(
+  blob: Blob,
+  maxSide = 2000,
+  quality = 0.92,
+): Promise<{ mime: string; base64: string; kb: number }> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(blob);
@@ -232,7 +237,7 @@ async function prepareImage(blob: Blob, maxSide = 2000): Promise<{ mime: string;
   ctx.fillRect(0, 0, width, height);
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close?.();
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
   const base64 = dataUrl.split(',')[1] ?? '';
   return { mime: 'image/jpeg', base64, kb: Math.round((base64.length * 3) / 4 / 1024) };
 }
@@ -428,6 +433,61 @@ async function callOpenAiCompatible(
   return text;
 }
 
+/**
+ * OCR.Space — موتور OCR ساده (بدون مدل زبانی).
+ *
+ * تنها سرویس رایگانی که محدودیت کشوری ندارد و فقط متن برمی‌گرداند؛ متن بعد از
+ * دریافت با پارسر محلی به فیلد تبدیل می‌شود. سقف پلن رایگان ۱ مگابایت برای هر
+ * تصویر است، پس تصویر پیش از ارسال کوچک می‌شود.
+ */
+const OCRSPACE_MAX_KB = 950;
+
+export async function callOcrSpace(
+  image: { mime: string; base64: string },
+  cfg: AiOcrConfig,
+  signal?: AbortSignal,
+): Promise<string> {
+  const info = providerInfo('ocrspace');
+  const base = baseUrlOf('ocrspace', cfg.baseUrl);
+  const language = (cfg.model || info.defaultModel || 'ara').trim();
+  const body = new FormData();
+  body.append('base64Image', `data:${image.mime};base64,${image.base64}`);
+  body.append('language', language);
+  body.append('isOverlayRequired', 'false');
+  body.append('detectOrientation', 'true');
+  body.append('scale', 'true');
+  body.append('isTable', 'true');
+  body.append('OCREngine', '2');
+  body.append('filetype', image.mime.includes('png') ? 'PNG' : 'JPG');
+
+  const response = await fetch(`${base}/parse/image`, {
+    method: 'POST',
+    signal,
+    headers: { apikey: cfg.apiKey },
+    body,
+  });
+  if (!response.ok) throw httpError('OCR.Space', response.status, await response.text());
+
+  const payload = await response.json() as {
+    ParsedResults?: Array<{ ParsedText?: string; ErrorMessage?: string; ErrorDetails?: string }>;
+    IsErroredOnProcessing?: boolean;
+    ErrorMessage?: string | string[];
+    OCRExitCode?: number;
+  };
+  if (payload.IsErroredOnProcessing) {
+    const message = Array.isArray(payload.ErrorMessage)
+      ? payload.ErrorMessage.join(' · ')
+      : payload.ErrorMessage;
+    throw new Error(`OCR.Space: ${message || 'پردازش تصویر ناموفق بود'}`);
+  }
+  const text = (payload.ParsedResults ?? [])
+    .map((result) => result.ParsedText ?? '')
+    .join('\n')
+    .trim();
+  if (!text) throw new Error('OCR.Space متنی از تصویر برنگرداند');
+  return text;
+}
+
 /** آدرس نهایی گفت‌وگو برای هر سرویس */
 export function chatEndpoint(cfg: AiOcrConfig): string {
   const base = baseUrlOf(cfg.provider, cfg.baseUrl);
@@ -496,6 +556,7 @@ async function callWithKeys(
 async function callProviderWith(cfg: AiOcrConfig, image: { mime: string; base64: string }, signal?: AbortSignal): Promise<string> {
   const info = providerInfo(cfg.provider);
   if (info.kind === 'gemini') return callGemini(image, cfg, signal);
+  if (info.kind === 'ocrspace') return callOcrSpace(image, cfg, signal);
   return callOpenAiCompatible(image, cfg, {
     url: chatEndpoint(cfg),
     label: info.label,
@@ -521,6 +582,24 @@ export async function testAiConnection(cfg: AiOcrConfig): Promise<{ ok: boolean;
         { headers: { 'x-goog-api-key': key }, signal: controller.signal },
       );
       if (!res.ok) return { ok: false, error: httpError('Gemini', res.status, await res.text()).message };
+      return { ok: true, model };
+    }
+    if (info.kind === 'ocrspace') {
+      // سرویس فهرست مدل ندارد؛ یک تصویر ۱×۱ سفید می‌فرستیم تا کلید سنجیده شود.
+      const probe = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const body = new FormData();
+      body.append('base64Image', `data:image/png;base64,${probe}`);
+      body.append('language', model || 'ara');
+      body.append('OCREngine', '2');
+      const res = await fetch(`${base}/parse/image`, {
+        method: 'POST', signal: controller.signal, headers: { apikey: key }, body,
+      });
+      if (!res.ok) return { ok: false, error: httpError('OCR.Space', res.status, await res.text()).message };
+      const payload = await res.json().catch(() => ({})) as { IsErroredOnProcessing?: boolean; ErrorMessage?: string | string[] };
+      if (payload.IsErroredOnProcessing) {
+        const message = Array.isArray(payload.ErrorMessage) ? payload.ErrorMessage.join(' · ') : payload.ErrorMessage;
+        return { ok: false, error: message || 'کلید پذیرفته نشد' };
+      }
       return { ok: true, model };
     }
     // سرویس‌های سازگار با OpenAI فهرست مدل دارند؛ مدل محلی ممکن است نداشته باشد،
@@ -571,8 +650,28 @@ export async function recognizeWithAi(blob: Blob, cfg: AiOcrConfig, timeoutMs = 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let image: { mime: string; base64: string; kb: number } | undefined;
   let attempts = 0;
+  const plainOcr = info.kind === 'ocrspace';
   try {
-    image = await prepareImage(blob);
+    if (plainOcr) {
+      // پلن رایگان OCR.Space سقف ۱ مگابایت دارد؛ تصویر پله‌پله کوچک می‌شود
+      image = await prepareImage(blob, 2000, 0.92);
+      for (const [side, quality] of [[1700, 0.72], [1400, 0.55], [1100, 0.45]] as const) {
+        if (image.kb <= OCRSPACE_MAX_KB) break;
+        image = await prepareImage(blob, side, quality);
+      }
+      if (image.kb > OCRSPACE_MAX_KB * 1.1) {
+        return {
+          ok: false,
+          model,
+          imageKb: image.kb,
+          attempts: 0,
+          error: 'تصویر برای پلن رایگان OCR.Space بزرگ است؛ آن را با کیفیت کمتر ذخیره کنید.',
+          elapsedMs: Math.round(performance.now() - started),
+        };
+      }
+    } else {
+      image = await prepareImage(blob);
+    }
     let lastError: unknown;
     let text = '';
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -590,12 +689,17 @@ export async function recognizeWithAi(blob: Blob, cfg: AiOcrConfig, timeoutMs = 
     if (lastError) throw lastError;
 
     let fields: AiFields;
-    try {
-      fields = normalizeFields(extractJson(text));
-    } catch {
-      // یک بار دیگر با تأکید بر JSON خالص می‌پرسیم
-      text = (await callWithKeys(image, cfg, controller.signal)).text;
-      fields = normalizeFields(extractJson(text));
+    if (plainOcr) {
+      // OCR.Space فقط متن می‌دهد؛ ساختار از پارسر محلی می‌آید (بدون داده ساختگی)
+      fields = fieldsFromOcrText(text);
+    } else {
+      try {
+        fields = normalizeFields(extractJson(text));
+      } catch {
+        // یک بار دیگر با تأکید بر JSON خالص می‌پرسیم
+        text = (await callWithKeys(image, cfg, controller.signal)).text;
+        fields = normalizeFields(extractJson(text));
+      }
     }
 
     return {

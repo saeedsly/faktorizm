@@ -203,8 +203,52 @@
     </div>
   </section>
 
+
   <section>
-    <h2><span class="num">۴</span> اگر خطا دیدی</h2>
+    <h2><span class="num">۴</span> اگر گوگل در شبکه‌ات باز نشد: OCR.Space</h2>
+    <div class="card">
+      <p class="step-body">
+        بعضی شبکه‌ها (از جمله بسیاری از خطوط اینترنت ایران) صفحه‌های گوگل را باز نمی‌کنند.
+        برای همین یک گزینهٔ جایگزین هم داخل برنامه گذاشته شده که <b>محدودیت کشوری ندارد</b> و
+        کارت بانکی هم نمی‌خواهد: <b>OCR.Space</b>.
+      </p>
+      <ol>
+        <li>
+          <p class="step-title">صفحهٔ کلید رایگان را باز کن</p>
+          <p class="step-body">برو به <code>https://ocr.space/ocrapi/freekey</code> — فرم کوچکی با یک کادر ایمیل دیده می‌شود.</p>
+        </li>
+        <li>
+          <p class="step-title">ایمیل بده و Register را بزن</p>
+          <p class="step-body">همان لحظه ایمیل تأیید می‌آید؛ روی لینکش بزن. کلید در همان صفحه و در ایمیل نمایش داده می‌شود (با <code>K</code> شروع می‌شود و ۳۶ نویسه است).</p>
+        </li>
+        <li>
+          <p class="step-title">در فاکتوریزم انتخابش کن</p>
+          <p class="step-body">
+            تنظیمات ← بخش <b>خوانش</b> ← حالت <b>فقط ابری</b> ← کارت <b>OCR.Space</b>
+            ← کلید را در کادر <b>کلیدهای API</b> بچسبان ← مدل را <code>ara</code> بگذار ← <b>آزمون اتصال</b>.
+          </p>
+          <div class="callout ok">سقف رایگان: ۲۵٬۰۰۰ درخواست در ماه. هر تصویر باید زیر ۱ مگابایت باشد؛ برنامه خودش تصویر را کوچک می‌کند.</div>
+        </li>
+        <li>
+          <p class="step-title">تفاوتش با Gemini چیست؟</p>
+          <p class="step-body">
+            OCR.Space فقط <b>متن</b> تصویر را برمی‌گرداند و ساختار فاکتور را نمی‌فهمد؛ برنامه متن را با
+            پارسر محلی خودش به فیلد تبدیل می‌کند. برای فاکتور چاپی تمیز نتیجه خوب است، ولی در
+            جدول‌های شلوغ یا عکس کج، دقتش از Gemini کمتر است. اگر جایی گوگل باز شد، همان را ترجیح بده.
+          </p>
+        </li>
+      </ol>
+      <table style="margin-top:10px">
+        <tr><th>خطا</th><th>معنی</th><th>راه‌حل</th></tr>
+        <tr><td><code>Invalid API key</code></td><td>کلید غلط یا نصفه کپی شده</td><td>کلید را دوباره از ایمیل کپی کن</td></tr>
+        <tr><td><code>E101</code> / حجم</td><td>تصویر بزرگ‌تر از سقف رایگان</td><td>عکس را با کیفیت کمتر ذخیره کن؛ برنامه هم خودش کوچک می‌کند</td></tr>
+        <tr><td><code>429</code></td><td>سقف ماهانه پر شده</td><td>چند کلید در کادر بگذار تا خودکار جابه‌جا شود</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">۵</span> اگر خطا دیدی</h2>
     <div class="card">
       <table>
         <tr><th>پیام</th><th>معنی</th><th>راه‌حل</th></tr>
@@ -219,7 +263,7 @@
   </section>
 
   <section>
-    <h2><span class="num">۵</span> اگر منطقه‌ات پشتیبانی نشود</h2>
+    <h2><span class="num">۶</span> اگر منطقه‌ات پشتیبانی نشود</h2>
     <div class="card">
       <div class="callout danger">
         گوگل AI Studio برای برخی کشورها (از جمله ایران) به دلایل قانونی باز نمی‌شود. استفاده از VPN برای دور زدن این محدودیت
@@ -249,7 +293,7 @@ ollama pull qwen2.5vl:7b</pre>
   </section>
 
   <section>
-    <h2><span class="num">۶</span> امنیت کلید</h2>
+    <h2><span class="num">۷</span> امنیت کلید</h2>
     <div class="card">
       <ul class="checklist">
         <li>کلید مثل رمز عبور است؛ در چت، اسکرین‌شات یا فایل عمومی نگذارش.</li>
@@ -262,7 +306,7 @@ ollama pull qwen2.5vl:7b</pre>
   </section>
 
   <section>
-    <h2><span class="num">۷</span> چک‌لیست</h2>
+    <h2><span class="num">۸</span> چک‌لیست</h2>
     <div class="card">
       <ul class="checklist">
         <li>حساب گوگل دارم</li>
