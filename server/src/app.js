@@ -40,7 +40,10 @@ export function createApp() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'", 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'"],
+        // اتصال به سرویس‌های ابری خوانش (Gemini، OpenRouter، OCR.Space، مدل محلی)
+        // از خودِ مرورگر انجام می‌شود؛ با 'self' تنها، همهٔ این فراخوانی‌ها بلاک
+        // می‌شدند و «آزمون اتصال» همیشه شکست می‌خورد. فقط https و لوکال مجاز است.
+        connectSrc: ["'self'", 'https:', 'http://localhost:*', 'http://127.0.0.1:*'],
         objectSrc: ["'none'"],
         // در استقرار عادی هیچ سایتی اجازهٔ قاب‌کردن برنامه را ندارد؛ برای پیش‌نمایش
         // داخل میزکار (ALLOW_PREVIEW=1) فقط دامنهٔ پیش‌نمایش مجاز می‌شود.
